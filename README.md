@@ -66,4 +66,4 @@ network = predictor.infer_network(
 ```
 
 ## Cite us
-Conservation and Global Patterns of Transcription Factor Networks in Klebsiella pneumoniae<img width="432" height="75" alt="image" src="https://github.com/user-attachments/assets/54b87291-1ad2-4736-bec0-440af5decffc" />
+Conservation and Global Patterns of Transcription Factor Networks in Klebsiella pneumoniae
