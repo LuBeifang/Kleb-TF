@@ -1,0 +1,224 @@
+# KP-TF
+load data
+```{R}
+rm(list=ls())
+library(ggplot2)
+library(dplyr)
+
+cog_new <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/forNetwork/klebTF_COG_excludeTF_final.csv")
+TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+ana <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/defaultnode.csv")
+
+coginnet <- merge(ana,cog_new,by.x="shared.name",by.y="gene",all.x=T)
+
+coginnet$cog.1 <- ifelse(is.na(coginnet$cog.1), ifelse(coginnet$shared.name %in% TF_pfam$Gene, "TF", "miss"), coginnet$cog.1)
+table(coginnet$cog.1)
+
+setdiff(TF_pfam$Gene,coginnet[coginnet$cog.1=="TF",]$shared.name)
+setdiff(TF_pfam$Gene, ana$shared.name)
+```
+
+# KP-GRN
+## 9 COG functional category
+Define vital TF from COG categories
+TF in COG clusters
+```{R}
+target <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/target.csv")
+
+length(unique(target$TF_candidate))
+length(setdiff(unique(target$feature),unique(target$TF_candidate)))
+
+target_cog <- merge(target, cog_new, by.x = "feature", by.y = "GID", all.x = T)
+target_cog$cog.1[is.na(target_cog$cog.1)] <- "unknown"
+
+
+
+# calculate how many cog in one TF
+TF_cog <- aggregate(feature ~ TF_candidate + cog.1, target_cog, FUN = length)
+total_genes <- aggregate(feature ~ TF_candidate, data = target_cog, length)
+total_genesinCate <- as.data.frame(table(cog_new$cog.1))
+TF_cog_count <- merge(TF_cog, total_genes, by = "TF_candidate")
+TF_cog_count <- merge(TF_cog_count, total_genesinCate, by.x = "cog.1", by.y = "Var1")
+rm(TF_cog)
+
+# calculate ratio
+TF_cog_count$Proportion <- TF_cog_count$feature.x / TF_cog_count$feature.y
+TF_cog_count$CateProportion <- TF_cog_count$feature.x / TF_cog_count$Freq
+colnames(TF_cog_count) <- c("Cate", "TF", "GeneCount", "TotalGeneCount", "TotalCateGene", "Proportion", "ProportioninCate")
+# write.csv(TF_cog_count, "/Users/lubeifang/Desktop/Kleb_dap/files/TF_target_cog0531.csv", row.names = F)
+```
+
+## GO analysis of 9 COG functional categories
+```{R}
+library(clusterProfiler)
+library(gridExtra)
+library(cowplot)
+library(GO.db)
+library(readr)
+library(tidyverse)
+
+go2term <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/go2term.csv")
+gene2go <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/gene2go.csv")
+
+cate <- c("activity","metabolism","trans","wall","motility","protein","unknown","scretion","defense")
+# plot_list <- list()
+go_all <- data.frame()
+for (i in cate){
+  print(i)
+  if (i == "unknown"){
+    df <- cog_new[cog_new$cog.1 == i | cog_new$cog.1 == "notG",]
+  }
+  else {
+    df <- cog_new[cog_new$cog.1 == i,]
+  }
+  GO <- enricher(df$GID,
+                TERM2GENE = gene2go[,c(2,1)],
+                TERM2NAME = go2term,
+                pvalueCutoff = 1)
+  df <- data.frame(name = i, as.data.frame(GO))
+  df <- df[order(df$pvalue,decreasing = F),][c(1:3),]
+  go_all <- rbind(go_all, df)
+  # p <- dotplot(sample_GO, showCategory=3)
+  # plot_list[[length(plot_list)+1]] <- p
+}
+
+go_all$Description <- factor(go_all$Description, levels = go_all$Description)
+go_all <- na.omit(go_all)
+
+convert_to_decimal <- function(fraction) {
+  parts <- strsplit(fraction, "/")[[1]]
+  numerator <- as.numeric(parts[1])
+  denominator <- as.numeric(parts[2])
+  return (numerator / denominator)
+}
+
+go_all$GeneRatio <- sapply(go_all$GeneRatio , convert_to_decimal)
+
+ggplot(go_all, aes(x=GeneRatio, y=Description, size = Count)) +
+  geom_point(aes(fill=pvalue), shape=21) +
+  scale_fill_gradientn(colors = rev(hcl.colors(10, "YlGnBu"))) +
+  # coord_flip() +
+  theme_light() +
+  theme(axis.text.x=element_text(angle=45,hjust = 1,vjust=1)) +
+  xlab("") +
+  ylab("") +
+  scale_y_discrete(limits = rev(go_all$Description))
+# ggsave(file="GO_COG.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure2/", width = 8, height = 8)
+```
+
+## GRN features
+#### F2b Degree
+```{R}
+ana <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/defaultnode.csv")
+
+p1<-ggplot(ana,aes(x = log(Degree))) +
+  geom_density() +
+  theme_light() +  
+  theme(
+    panel.background = element_rect(fill = "transparent", color = NA),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    panel.border = element_rect(color = "black", fill = NA), 
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank()  
+  ) +
+  xlab("log10(Degree)") +
+  ylab("Density")
+p2<-ggplot(ana,aes(x = ClosenessCentrality)) +
+  geom_density() +
+  theme_light() +  # 使用最小主题
+  theme(
+    panel.background = element_rect(fill = "transparent", color = NA),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    panel.border = element_rect(color = "black", fill = NA), 
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank()  
+  ) +
+  xlab("Closeness Centrality") +z
+  ylab("Density")
+p <- p1 + p2
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure2/degreeCC_density.pdf", width = 4, height = 2)
+
+```
+#### SF3a
+```{r}
+ggplot(TF_cog_count, aes(x = TF, y = ProportioninCate, fill = Cate)) +
+  geom_bar(stat = "identity", position = "stack") + 
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","grey","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) +
+  theme_void() + 
+  labs(
+    fill = "Variable"  # Legend title
+  ) +
+  theme(
+    text = element_text(size = 12, face = "bold"), 
+    legend.position = "right",  
+    axis.text.x = element_blank()  # Tilt x-axis labels for better visibility
+  )
+# ggsave("feature_eachpeak0523.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure2/", width = 8, height = 5)
+```
+#### SF3b
+```{R}
+library(ggplot2)
+library(patchwork)
+
+TF_cate<-read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/TF_cluster_cog0531.csv")
+ana<-read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/defaultnode.csv")
+
+temp <- merge(TF_cate, ana, by.x="TF", by.y="shared.name")
+
+p1 <- ggplot(temp, aes(x=Cate, y=log10(ProportioninCate), fill=Cate)) +
+  geom_violin() +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none")+
+  coord_flip() +
+  xlab("") +
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) 
+p2 <- ggplot(temp, aes(x=Cate, y=log10(Degree), fill=Cate)) +
+  geom_violin() +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())+
+  coord_flip() +
+  xlab("") +
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) 
+p3 <- ggplot(temp, aes(x=Cate, y=ClosenessCentrality, fill=Cate)) +
+  geom_violin() +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())+
+  coord_flip() +
+  xlab("") +
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) 
+p4 <- ggplot(temp, aes(x=Cate, y=TopologicalCoefficient, fill=Cate)) +
+  geom_violin() +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())+
+  coord_flip() +
+  xlab("") +
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) 
+p5 <- ggplot(temp, aes(x=Cate, y=log10(Stress), fill=Cate)) +
+  geom_violin() +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank())+
+  coord_flip() +
+  xlab("") +
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) 
+
+p <- p1+p2+p3+p4+p5 + plot_layout(ncol = 5)
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure2/violin.pdf",p,width = 12,height = 10)
+```

@@ -1,0 +1,215 @@
+# KP-TF
+# antibiotic network features Anti_analyze
+## antibio
+
+```{r}
+# Annotate antibiotic resistant genes
+blast=read.csv("/Users/lubeifang/Desktop/anti_results.txt", sep = "\t", header = F)
+# blast$V1 <- sapply(strsplit(blast$V1, ":"), `[`, 1)
+colnames(blast) = c("Query_id","Subject_id","Identity","Align_length","Miss_match",
+                    "Gap","Query_start","Query_end","Subject_start","Subject_end","E_value","Score")
+blast_f <-arrange(blast, desc(Score)) %>%
+  distinct(Query_id, Subject_id, .keep_all = T)
+
+# extract Locus or Protein name
+blast_f$name <- sub("^[^_]*_[^_]*_[^_]*_([^_]*_[^_]*)_.*$", "\\1",  blast_f$Subject_id)
+
+# Change protein name to locus
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno.tsv", sep = "\t")
+blast_n <- merge(blast_f,gene_anno[,c(11,13)],by.x = "name",by.y = "Protein.accession",all.x = T)
+blast_n$Locus.tag <- ifelse(is.na(blast_n$Locus.tag),blast_n$name,blast_n$Locus.tag)
+blast_n$Locus.tag <- gsub("FFT48_","", blast_n$Locus.tag)
+
+# remove duplicate
+blast_n <-arrange(blast_n, desc(Score)) %>%
+  distinct(Query_id, Locus.tag, .keep_all = T)
+
+blast_test <-arrange(blast_n, desc(Score)) %>%
+  distinct(Locus.tag, .keep_all = T)
+
+blast <- blast_test[blast_test$Identity >= 90 & blast_test$Score > 50,]
+# save 13 antibiotic-resistat genes
+# write.csv(blast,"/Users/lubeifang/Desktop/13antibiotic-gene.csv")
+```
+
+# Genelaize antibiotic network
+```{R}
+rm(list=ls())
+
+# Antibiotic resistant genes selection
+gtf <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno.tsv", sep="\t")
+aro <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/CARDdatabase/aro.tsv", sep = "\t")
+aro_index <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/CARDdatabase/aro_index.tsv", sep = "\t")
+
+
+antigenes <- merge(gtf,aro, by.x="Symbol", by.y="Name")
+
+index <- merge(antigenes,aro_index, by.x = "Accession.y", by.y = "ARO.Accession")
+index <- index[,c(14,2,26)]
+unique(index$Drug.Class)
+unique(index$Resistance.Mechanism)
+
+# write.csv(index,"/Users/lubeifang/Desktop/antibiotic-resistant-CARD.csv",row.names = F)
+
+new_gene <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/anti/13antibiotic-gene.csv")
+new_gene <- new_gene[,c(15:17)]
+colnames(new_gene) <- colnames(index)
+index <- rbind(index, new_gene)
+
+target1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/target.csv")
+target2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/merged_peaks_plasmid.csv")
+# intersect(unique(target2$feature), unique(new_gene$Locus.tag))
+target2 <- target2[target2$insideFeature == "upstream" | target2$insideFeature == "overlapStart",] [,c(1,5,9,27)]
+colnames(target2) <- colnames(target1)
+target <- rbind(target1, target2)
+
+network <- merge(target, index, by.x = "feature", by.y="Locus.tag")
+unique(network$TF_candidate)
+length(unique(network$Symbol.y))
+unique(merge(data.frame(name=unique(network$feature)), gene_anno, by.x="name",by.y="Locus.tag"))
+
+setdiff(new_gene$Symbol,network$Symbol.y)
+# write.csv(network,"/Users/lubeifang/Desktop/network-anti.csv",row.names = F)
+```
+
+#### F4a,b
+```{R}
+# library(ggplot2)
+# a <- as.data.frame(table(index$'Resistance.Mechanism'))
+# a$Var1 <- as.character(a$Var1)
+# a[2,1] <- 'reduced permeability'
+# p1 <- ggplot(a, aes(y=Freq, x=Var1))+
+#   geom_segment( aes(x=Var1, yend=Freq, y=0, xend=Var1), color="grey") +
+#   geom_point(color="orange",size=4) +
+#   coord_flip() +
+#   theme_light() +
+#   xlab("") +
+#   ylab("Closeness Centrality") +
+#   ylim(0,33) +
+#   theme(panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank()) +
+#   geom_text(aes(label = Freq), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# # ggsave("Resistance.Mechanism_count.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/", width = 6, height = 4)
+# 
+# a <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/CARDdatabase/anti_drug_CARD.csv")
+# a$Var1 <- gsub("antibiotic", "", a$Var1)
+# p2 <- ggplot(a[c(1:9),], aes(y=Freq, x=Var1))+
+#   geom_segment( aes(x=Var1, yend=Freq, y=0, xend=Var1), color="grey") +
+#   geom_point(color="orange",size=4) +
+#   coord_flip() +
+#   theme_light() +
+#   xlab("") +
+#   ylab("Closeness Centrality") +
+#   ylim(0,30) +
+#   theme(panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank()) +
+#   geom_text(aes(label = Freq), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# #ggsave("Resistance.drug_count.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/", width = 6, height = 4)
+# 
+# p <- p1+p2
+# ggsave("CARD2.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/", width = 7, height = 4)
+
+```
+
+
+### virulence gene from bigsdb
+```{R}
+# bigsdb <- read.csv("/Users/lubeifang/Desktop/virulencegene_bigsdb.csv")
+# viru <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/viru/gene_list/all.txt",header = F)
+# setdiff(bigsdb$locus, viru$V1)
+# a <- intersect(bigsdb$locus, gtf$Symbol)
+# setdiff(a,viru$V1)
+```
+
+
+#### F4c,d & SF7
+```{r}
+Anti_ana <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/ana-network-anti.csv")
+
+temp <- Anti_ana[order(Anti_ana$Indegree,decreasing = T),][c(1:8),]
+temp$name <- factor(temp$name, levels = rev(temp$name))
+
+
+p3<-ggplot(temp, aes(y=Indegree, x=name))+
+  geom_segment( aes(x=name, yend=Indegree, y=0, xend=name), color="grey") +
+  geom_point(color="#B7B2D0",size=4) +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  ylab("Indegree") +
+  ylim(0,40) +
+  ggtitle("TF rank")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  geom_text(aes(label = Indegree), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+
+temp <- Anti_ana[order(Anti_ana$Outdegree,decreasing = T),][c(0:8),]
+temp$name <- factor(temp$name, levels = rev(temp$name))
+p4 <- ggplot(temp, aes(y=Outdegree, x=name))+
+  geom_segment( aes(x=name, yend=Outdegree, y=0, xend=name), color="grey") +
+  geom_point(color="#B7B2D0",size=4) +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  ylab("Degree") +
+  ylim(0,12) +
+  ggtitle("Target genes rank")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  geom_text(aes(label = Outdegree), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+p <- p3+p4
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/inoutdegree.pdf",p,width = 7.5,height = 4)
+
+# temp <- Anti_ana[order(Anti_ana$Degree,decreasing = T),][c(6,9:12),]
+# temp$name <- factor(temp$name, levels = rev(temp$name))
+# p1<-ggplot(temp, aes(y=ClosenessCentrality, x=name))+
+#   geom_segment( aes(x=name, yend=ClosenessCentrality, y=0, xend=name), color="grey") +
+#   geom_point(color="#B7B2D0",size=4) +
+#   coord_flip() +
+#   theme_light() +
+#   xlab("") +
+#   ylab("Closeness Centrality") +
+#   ylim(0,1) +
+#   ggtitle("TF rank")+
+#   theme(panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank()) +
+#   geom_text(aes(label = round(ClosenessCentrality,2)), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# 
+# temp <- Anti_ana[order(Anti_ana$Degree,decreasing = T),][c(1:5),]
+# temp$name <- factor(temp$name, levels = rev(temp$name))
+# p2 <- ggplot(temp, aes(y=ClosenessCentrality, x=name))+
+#   geom_segment( aes(x=name, yend=ClosenessCentrality, y=0, xend=name), color="grey") +
+#   geom_point(color="#B7B2D0",size=4) +
+#   coord_flip() +
+#   theme_light() +
+#   xlab("") +
+#   ylab("Closeness Centrality") +
+#   ylim(0,1) +
+#   ggtitle("Target genes rank")+
+#   theme(panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank()) +
+#   geom_text(aes(label = round(ClosenessCentrality,2)), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# 
+# p <- p1+p2
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/CCinanti.pdf",p,width = 5,height = 3)
+# 
+# 
+# all <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/allpeak.csv",header = F)
+# tf <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+# tf_network <- merge(all,tf,by.x="V27",by.y="Gene")
+# write.csv(tf_network,"/Users/lubeifang/Desktop/Kleb_dap/files/370tf_network.csv", quote = F,row.names = F)
+```
+
+```{r}
+# target <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/target.csv")
+# anti <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/anti/antibiotic/all.txt",header = F)
+# 
+# network_anti <- merge(target, anti, by.x="Symbol", by.y="V1")
+# length(unique(network_anti$Symbol))
+# # write.csv(network_anti,"/Users/lubeifang/Desktop/Kleb_dap/files/network-anti2.csv",quote = F,row.names = F)
+# 
+# viru <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/gene_list/all.txt",header = F)
+# 
+# network_viru <- merge(target, anti, by.x="Symbol", by.y="V1")
+# # write.csv(network_viru,"/Users/lubeifang/Desktop/Kleb_dap/files/network-viru.csv",quote = F,row.names = F)
+```

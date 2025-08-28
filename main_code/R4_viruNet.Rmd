@@ -1,0 +1,463 @@
+# KP-TF
+# Virulence network
+## 27 master TF
+```{R}
+rm(list=ls())
+TF_cog_count <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/TF_target_cog0531.csv")
+cog_new <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/forNetwork/klebTF_COG_excludeTF_final.csv")
+target <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/target.csv")
+target_cog <- merge(target, cog_new, by.x = "feature", by.y = "GID", all.x = T)
+TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+ana <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/defaultnode.csv")
+
+# chose vital TF
+TF_cate <- TF_cog_count[order(TF_cog_count$ProportioninCate, decreasing = T),]
+TF_cate <- subset(TF_cate, TF_cate$Cate != "notG") %>%
+  distinct(TF, .keep_all = T)
+table <- as.data.frame(table(TF_cate$Cate))
+
+
+# visualize top 27 TF
+top_TF <- data.frame()
+for (i in unique(TF_cate$Cate)){
+  print(i)
+  df <- TF_cate[TF_cate$Cate==i,]
+  df <- df[order(df$ProportioninCate, decreasing = T),][c(1:3),]
+  top_TF <- rbind(top_TF, df)
+}
+
+top_TF$TF <- factor(top_TF$TF, levels = top_TF$TF)
+```
+## 8 Vital virulence pathway selection for sub-network
+```{R}
+# keep only named genes, and select vital COG clusters
+# Use 27 important TF
+target_cog_gene <- merge(target_cog,top_TF,by.x="TF_candidate", by.y="TF") %>% 
+  filter(!grepl("RS", gene)) 
+length(unique(target_cog_gene$gene))
+
+# virulence gene
+gene <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/genewithname.csv")
+# gene <- read.csv("/Users/lubeifang/Desktop/siderophore.csv",header = F)
+a <- merge(target_cog_gene,gene,by.x="Symbol.x",by.y="gene")
+length(unique(a$gene))
+b <- merge(top_TF, TF_pfam, by.x = "TF", by.y = "Gene")
+# write.csv(a, "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/27TF_network250417.csv",quote=F)
+# write.csv(b, "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/27TF_index250417.csv",quote=F)
+# %>% subset(cog.1 == "wall" | cog.1 == "motility" | cog.1 == "scretion" | cog.1 == "defense" )
+```
+#### SF4a
+```{r}
+ggplot(top_TF, aes(x=TF,y=ProportioninCate,fill=Cate)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values=c("#66C2A5","#984EA3","#FC8D62","#A6D854","#FFD92F","#0B3B3B","#8DA0CB", "#E5C494","#E78AC3")) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+       axis.text.x=element_text(angle=45,hjust = 1,vjust=1),
+       legend.position = c(0.9,0.6),
+       legend.background = element_rect(linetype="solid", colour ="grey")) +
+  xlab("") +
+  ylab("Propotion of target in Categories")
+# ggsave("TOP3x8TF.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF4/", width = 8, height = 5)
+```
+
+## TOP 10 CC master TF
+#### SF4b
+```{R}
+# Top closeness C
+TF_net <- merge(ana,TF_cate,by.x="name", by.y="TF")
+TF_net <- merge(TF_net, TF_pfam, by.x="name", by.y="Gene")
+TF_net <- TF_net[order(TF_net$ClosenessCentrality, decreasing = T),][c(1:10),]
+
+TF_net$name <- factor(TF_net$name, levels = rev(TF_net$name))
+ggplot(TF_net, aes(y=ClosenessCentrality, x=name))+
+  geom_segment( aes(x=name, yend=ClosenessCentrality, y=0.3, xend=name), color="grey") +
+  geom_point(color="orange",size=4) +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  ylab("Closeness Centrality") +
+  ylim(0.3,0.6) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  geom_text(aes(label = round(ClosenessCentrality,2)), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# ggsave("top10CC.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/", width = 3.5, height = 4)
+```
+## radar plot top CC TF
+#### F3f & SF4c
+```{R}
+# Laser plot of import 3 CC TF
+library(ggradar)
+lcols <- c("#EEA236", "#5CB85C", "#46B8DA")
+TF1 <- c("RS15210")
+TF1 <- c("RS00760")
+TF3 <- c("RS00760", "RS15210", "RS09805")
+# top closeness centrality
+TF10 <- c("RS10135", "RS00760", "RS15210", "RS26715", "RS18490", "RS23320", 
+          "RS09805", "RS07795", "RS03555")
+df <- data.frame()
+
+for (i in TF1){
+  print(i)
+  df1 <- subset(TF_cog_count, TF == i) %>%
+    subset(Cate != "notG")
+  df2 <- t(df1[,c(7)])
+  colnames(df2) <- t(df1)[c(1),]
+  df2 <- data.frame(name = i, as.data.frame(df2))
+  df <- rbind(df,df2)
+}
+
+# RS11545 have one type 0
+# df1 <- subset(TF_cog_count, TF == "RS11545") %>%
+#     subset(Cate != "notG")
+# df2 <- t(df1[,c(7)])
+# colnames(df2) <- t(df1)[c(1),]
+# df2 <- data.frame(name = "RS11545", defense = as.numeric(0), motility = as.numeric(0), scretion = as.numeric(0), 
+#                   as.data.frame(df2))
+# df <- rbind(df,df2)
+
+ggradar(df,
+        background.circle.colour = "white",
+        axis.line.colour = "gray60",
+        gridline.min.colour = "gray60",
+        gridline.mid.colour = "gray60",
+        gridline.max.colour = "gray60",
+        group.colours = lcols[1],
+        group.line.width = 0.5,
+        group.point.size = 0.1,
+        grid.min = 0,
+        grid.mid = 0.15,
+        grid.max = 0.3,
+        label.gridline.min = F,
+        label.gridline.mid = F,
+        label.gridline.max = F,
+        fill = T,
+        legend.position = "bottom") 
+# ggsave("radar_3TF.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/", width = 8, height = 5)
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/RS00760_radar.pdf", width = 6, height = 4)
+```
+
+
+## Targets of 5 TF mentioned
+```{R}
+library(ellipse)
+library(RColorBrewer)
+
+peak5 <- data.frame()
+for (i in c("RS15210","RS20845","RS09805","RS00760","RS18490")){
+  print(i)
+  peak <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/",i,".csv"))
+  peak5 <- rbind(peak5,peak)
+}
+
+# initiate a matrix
+name <- sort(unique(peak5$TF))
+node <- sort(unique(peak5$feature))
+
+matrix <- matrix(0, nrow = length(node), ncol = length(name), 
+                 dimnames = list(node, name))
+
+for (i in 1:nrow(peak5)) {
+  name_index <- which(name == peak5$TF[i])
+  node_index <- which(node == peak5$feature[i])
+  matrix[node_index, name_index] <- peak5$singalValue[i]
+}
+
+
+data <- cor(matrix)
+
+# Build a Pannel of 100 colors with Rcolor Brewer
+my_colors <- brewer.pal(5, "Spectral")
+my_colors <- colorRampPalette(my_colors)(100)
+
+# Order the correlation matrix
+ord <- order(data[1, ])
+data_ord <- data[ord, ord]
+```
+#### F3e
+```{r}
+# pdf("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/co_5TF.pdf")
+plotcorr(data_ord , col=my_colors[data_ord*50+50] , mar=c(1,1,1,1),
+         numbers = F ,
+         type = c("full"), diag = T)
+# dev.off()
+```
+ 
+
+
+
+```{R}
+Viru_ana <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/analyzed_virulenceNetwork.csv")
+
+temp <- Viru_ana[order(Viru_ana$Degree,decreasing = T),][c(1:8),]
+temp$name <- factor(temp$name, levels = rev(temp$name))
+
+p1<-ggplot(temp, aes(y=Degree, x=name))+
+  geom_segment( aes(x=name, yend=Degree, y=10, xend=name), color="grey") +
+  geom_point(color="#B7B2D0",size=4) +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  ylab("Degree") +
+  ylim(10,45) +
+  ggtitle("TF rank")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  geom_text(aes(label = Degree), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+
+temp <- Viru_ana[!grepl("RS", Viru_ana$name), ]
+temp <- temp[order(temp$Degree,decreasing = T),][c(1:8),]
+temp$name <- factor(temp$name, levels = rev(temp$name))
+p2 <- ggplot(temp, aes(y=Degree, x=name))+
+  geom_segment( aes(x=name, yend=Degree, y=4, xend=name), color="grey") +
+  geom_point(color="#B7B2D0",size=4) +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  ylab("Degree") +
+  ylim(4,20) +
+  ggtitle("Target genes rank")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  geom_text(aes(label = Degree), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+
+p <- p2/p1
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/degreein27.pdf",p,width = 2.7,height = 6)
+
+# temp <- Viru_ana[order(Viru_ana$ClosenessCentrality,decreasing = T),][c(1:8),]
+# temp$name <- factor(temp$name, levels = rev(temp$name))
+# p1<-ggplot(temp, aes(y=ClosenessCentrality, x=name))+
+#   geom_segment( aes(x=name, yend=ClosenessCentrality, y=0, xend=name), color="grey") +
+#   geom_point(color="#B7B2D0",size=4) +
+#   coord_flip() +
+#   theme_light() +
+#   xlab("") +
+#   ylab("Closeness Centrality") +
+#   ylim(0,1) +
+#   ggtitle("TF rank")+
+#   theme(panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank()) +
+#   geom_text(aes(label = round(ClosenessCentrality,2)), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# 
+# temp <- Viru_ana[!grepl("RS", Viru_ana$name), ]
+# temp <- temp[order(temp$ClosenessCentrality,decreasing = T),][c(1:8),]
+# temp$name <- factor(temp$name, levels = rev(temp$name))
+# p2 <- ggplot(temp, aes(y=ClosenessCentrality, x=name))+
+#   geom_segment( aes(x=name, yend=ClosenessCentrality, y=0, xend=name), color="grey") +
+#   geom_point(color="#B7B2D0",size=4) +
+#   coord_flip() +
+#   theme_light() +
+#   xlab("") +
+#   ylab("Closeness Centrality") +
+#   ylim(0,1) +
+#   ggtitle("Target genes rank")+
+#   theme(panel.grid.major = element_blank(),
+#         panel.grid.minor = element_blank()) +
+#   geom_text(aes(label = round(ClosenessCentrality,2)), position = position_dodge(width = 0.9), hjust = -1,color = "black")
+# 
+# p <- p1+p2
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF4//CCin27.pdf",p,width = 5,height = 3)
+```
+
+## Plot IGV for gene fimA and ybtU
+### fimA
+```{R}
+source("https://github.com/PoisonAlien/trackplot/blob/master/R/trackplot.R?raw=true")
+ref <- "/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4.fasta"
+# gtf <- "/Users/lubeifang/Desktop/Kleb_dap/ref/trackplot.gtf"
+
+# Specify the path to the .bw file
+RS07795_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS07795-1.bw"
+RS07795_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS07795-2.bw"
+RS00760_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS00760-1.bw"
+RS00760_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS00760-2.bw"
+RS18490_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS18490-1.bw"
+RS18490_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS18490-2.bw"
+RS13215_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS13215-1.bw"
+RS13215_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS13215-2.bw"
+RS10980_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10980-1.bw"
+RS10980_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10980-2.bw"
+RS09070_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS09070-1.bw"
+RS09070_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS09070-2.bw"
+
+
+
+# bigWigs = c(RS07795_1,RS00760_1)
+bigWigs = c(RS07795_1,RS00760_2,RS09070_1,EV1)
+
+bigWigs = read_coldata(bws = bigWigs, build = ref)
+
+#Region to plot
+# fimA
+loci = "NZ_CP040539.1:2457993-2459090"
+
+#Extract bigWig signal for a loci of interest
+track_data = track_extract(colData = bigWigs, loci = loci, query_ucsc=F)
+track_cols = c("#cad96d","#bfd5e9","#A2A6BF","#b9b9b9")
+
+pdf("/Users/lubeifang/Desktop/fimA.pdf")
+track_plot(summary_list = track_data,
+           col = track_cols, 
+           draw_gene_track = F,
+           show_ideogram = TRUE,
+           y_max = 700,
+           y_min = 0)
+dev.off()
+
+library(gggenes)
+library(ggplot2)
+
+fig <- data.frame(molecule=rep("Genome",1),
+                  gene=c("fimA"),
+                  start=c(2458067),
+                  end=c(2458612),
+                  strand=c("reverse"))
+fig$orientation <- ifelse(fig$strand == "forward", TRUE, FALSE)
+
+ggplot(fig, aes(xmin = start, xmax = end, y = molecule, fill = gene, label = gene, forward = orientation)) +
+  geom_gene_arrow(arrowhead_height = unit(14, "mm"), arrowhead_width = unit(6, "mm"),
+                  arrow_body_height = unit(14, "mm")) +
+  facet_wrap(~ molecule, scales = "free", ncol = 1) +
+  scale_fill_manual(values = c("white","#8A8DBF","white")) +
+  theme_genes() +
+  geom_gene_label(grow = T) +
+  xlim(2457993,2459090)
+ggsave("/Users/lubeifang/Desktop/fimA_gene.pdf")
+```
+
+### cirA
+```{R}
+# Specify the path to the .bw file
+RS15210_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS15210-1.bw"
+RS15210_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS15210-2.bw"
+RS07795_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS07795-1.bw"
+RS07795_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS07795-2.bw"
+RS00760_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS00760-1.bw"
+RS00760_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS00760-2.bw"
+RS12175_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS12175-1.bw"
+RS12175_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS12175-2.bw"
+RS10135_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10135-1.bw"
+RS10135_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10135-2.bw"
+EV1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/EV1.bw"
+EV3 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/EV3.bw"
+
+
+bigWigs = c(RS15210_1,RS07795_2,RS00760_2,EV1)
+
+bigWigs = read_coldata(bws = bigWigs, build = ref)
+
+#Region to plot
+# cirA
+loci = "NZ_CP040539.1:3249872-3252360"
+
+#Extract bigWig signal for a loci of interest
+track_data2 = track_extract(colData = bigWigs, loci = loci, query_ucsc=F)
+track_cols = c("#cad96d","#bfd5e9","#A2A6BF","#b9b9b9")
+
+pdf("/Users/lubeifang/Desktop/cirA.pdf")
+track_plot(summary_list = track_data2,
+           col = track_cols, 
+           draw_gene_track = F,
+           show_ideogram = F,
+           y_max = 500,
+           y_min = 0)
+dev.off()
+
+
+
+fig <- data.frame(molecule=rep("Genome",1),
+                  gene=c("cirA"),
+                  start=c(3250316),
+                  end=c(3252289),
+                  strand=c("forward"))
+fig$orientation <- ifelse(fig$strand == "forward", TRUE, FALSE)
+
+ggplot(fig, aes(xmin = start, xmax = end, y = molecule, fill = gene, label = gene, forward = orientation)) +
+  geom_gene_arrow(arrowhead_height = unit(14, "mm"), arrowhead_width = unit(6, "mm"),
+                  arrow_body_height = unit(14, "mm")) +
+  facet_wrap(~ molecule, scales = "free", ncol = 1) +
+  scale_fill_manual(values = c("white","#8A8DBF","white")) +
+  theme_genes() +
+  geom_gene_label(grow = T) +
+  xlim(3249872,3252360)
+ggsave("/Users/lubeifang/Desktop/cirA_gene.pdf")
+```
+
+### galU
+```{R}
+# Specify the path to the .bw file
+RS15210_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS15210-1.bw"
+RS15210_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS15210-2.bw"
+RS07795_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS07795-1.bw"
+RS07795_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS07795-2.bw"
+RS00760_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS00760-1.bw"
+RS00760_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS00760-2.bw"
+RS12175_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS12175-1.bw"
+RS12175_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS12175-2.bw"
+RS10135_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10135-1.bw"
+RS10135_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10135-2.bw"
+RS18490_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS18490-1.bw"
+RS18490_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS18490-2.bw"
+RS13215_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS13215-1.bw"
+RS13215_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS13215-2.bw"
+RS10980_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10980-1.bw"
+RS10980_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS10980-2.bw"
+RS09070_1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS09070-1.bw"
+RS09070_2 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/RS09070-2.bw"
+
+EV1 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/EV1.bw"
+EV3 <- "/Users/lubeifang/Desktop/Kleb_dap/bw/EV3.bw"
+
+
+bigWigs = c(RS00760_1,RS15210_2,RS10135_2,EV1)
+bigWigs = read_coldata(bws = bigWigs, build = ref)
+
+#Region to plot
+# # galF
+# loci = "NZ_CP040539.1:3345834-3347567"
+# # wbaP
+# loci = "NZ_CP040539.1:3355519-3357088"
+# # ugd
+# loci = "NZ_CP040539.1:3369783-3371129"
+# galU
+loci = "NZ_CP040539.1:3701798-3703020"
+
+#Extract bigWig signal for a loci of interest
+track_data2 = track_extract(colData = bigWigs, loci = loci, query_ucsc=F)
+track_cols = c("#cad96d","#bfd5e9","#A2A6BF","#b9b9b9")
+
+pdf("/Users/lubeifang/Desktop/galU.pdf")
+track_plot(summary_list = track_data2,
+           col = track_cols, 
+           draw_gene_track = F,
+           show_ideogram = F,
+           y_max = 800,
+           y_min = 0)
+dev.off()
+
+
+
+fig <- data.frame(molecule=rep("Genome",1),
+                  gene=c("galU"),
+                  start=c(3701996),
+                  end=c(3702898),
+                  strand=c("forward"))
+fig$orientation <- ifelse(fig$strand == "forward", TRUE, FALSE)
+
+library(gggenes)
+ggplot(fig, aes(xmin = start, xmax = end, y = molecule, fill = gene, label = gene, forward = orientation)) +
+  geom_gene_arrow(arrowhead_height = unit(14, "mm"), arrowhead_width = unit(6, "mm"),
+                  arrow_body_height = unit(14, "mm")) +
+  facet_wrap(~ molecule, scales = "free", ncol = 1) +
+  scale_fill_manual(values = c("white","#8A8DBF","white")) +
+  theme_genes() +
+  geom_gene_label(grow = T) +
+  xlim(3701798,3703020)
+ggsave("/Users/lubeifang/Desktop/galU_gene.pdf")
+```
+
+
+
+
+

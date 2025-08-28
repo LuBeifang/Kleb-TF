@@ -1,0 +1,224 @@
+#KP-TF
+## TF hierarchy
+```{R}
+rm(list=ls())
+library(ggplot2)
+
+ana <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/analyzed_370TF.csv")
+
+ana$frac <- (ana$Outdegree-ana$Indegree)/(ana$Outdegree+ana$Indegree)
+ana <- ana[!is.na(ana$frac),]
+summary(ana$frac)
+# write.csv(ana,"/Users/lubeifang/Desktop/Kleb_dap/files/TMB_370TF.csv",row.names = F,quote = F)
+ggplot(ana, aes(x=frac)) +
+  geom_density(color="white", fill="#A9BEAF", alpha=0.5) +
+  labs(x="Hierarchy height",
+       y="Density") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  geom_vline(xintercept = 0.3, color = "grey", linetype = "dashed", size = 0.6) +
+  geom_vline(xintercept = -0.3, color = "grey", linetype = "dashed", size = 0.6)
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/TBM/H_density.pdf",width = 3.4,height = 3)
+```
+
+```{r}
+ana$type <- ifelse(ana$frac>=0.3, "top", 
+                   ifelse(ana$frac <= -0.3, "bottom","middle"))
+table(ana$type)
+temp <- ana[,c(28,32)]
+length(unique(temp$shared.name))
+
+net <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/370tf_network.csv")
+net <- net[,c(2,1,7)]
+colnames(net) <- c("from.tf","to.tf","file")
+net <- merge(net,temp, by.x="from.tf", by.y = "shared.name")
+colnames(net)[4] <- "from.layer" 
+net <- merge(net,temp, by.x="to.tf", by.y= "shared.name")
+colnames(net)[5] <- "to.layer" 
+
+
+
+## Regulations between layers
+net$rel <- paste0(net$from.layer," to ",net$to.layer)
+rel <- as.data.frame(table(net$rel))
+rel$class <- c(rep("Bottom",3),rep("Middle",3),rep("Top",3))
+
+rel$Var1 <- factor(rel$Var1, levels=rev(rel$Var1))
+p1<-ggplot(rel, aes(x=Var1,y=Freq,fill=class))+
+  geom_bar(stat = "identity") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = Freq), hjust = 0.5, vjust = -0.5, color = "black") +
+  xlab("") +
+  ylab("Count") +
+  ylim(0,1600) +
+  scale_fill_manual(values = c("#7a9065","#aab982","#f2fac4"))
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/TBM/counts.pdf",width = 6,height = 4)
+  
+
+
+## Regulations directly and indirectly
+indi <- merge(net,net,by.x="to.tf", by.y="from.tf")
+indi$di <- paste0(indi$from.tf," to ",indi$to.tf)
+indi$indi <- paste0(indi$from.tf," to ",indi$to.tf.y)
+
+length(unique(indi$di))
+length(unique(setdiff(indi$indi,indi$di)))
+same <- intersect(indi$indi,indi$di)
+length(same)
+
+indi_net <- indi[!indi$indi %in% same, ]
+indi_net <- indi[!indi$indi %in% indi$di, ]
+
+
+indi_net$indilayer <- paste0(indi_net$from.layer.x," to ",indi_net$to.layer.y)
+
+rel2 <- as.data.frame(table(indi_net$indilayer))
+rel2$class <- c(rep("Bottom",3),rep("Middle",3),rep("Top",3))
+
+rel2$Var1 <- factor(rel2$Var1, levels=rev(rel2$Var1))
+ggplot(rel2, aes(x=Var1,y=Freq,fill=class))+
+  geom_bar(stat = "identity") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = Freq), hjust = 0.5, vjust = -0.5, color = "black") +
+  xlab("") +
+  ylab("Count") +
+  ylim(0,10000) +
+  scale_fill_manual(values = c("#f2fac4","#aab982","#7a9065"))
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/TBM/counts_indi.pdf",width = 6,height = 4)
+  
+indi_net$indilayer3 <- paste0(indi_net$from.layer.x," to ",indi_net$to.layer.x, " to ", indi_net$to.layer.y)
+
+rel3 <- as.data.frame(table(indi_net$indilayer3))
+rel3$class2 <- c(rep("bottom",3),rep("middle",3),rep("top",3),rep("bottom",3),rep("middle",3),rep("top",3),rep("bottom",3),rep("middle",3),rep("top",3))
+rel3$class3 <- c(rep(c("BB","BM","BT"),3),rep(c("MB","MM","MT"),3),rep(c("TB","TM","TT"),3))
+
+rel3 <- rel3[order(rel3$class3),]
+rel3$Var1 <- factor(rel3$Var1, levels=rev(rel3$Var1))
+ggplot(rel3, aes(x=Var1,y=Freq,fill=class2))+
+  geom_bar(stat = "identity") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = Freq), hjust = 0.5, vjust = -0.5, color = "black",size=2) +
+  xlab("") +
+  ylab("Count") +
+  ylim(0,6000) +
+  scale_fill_manual(values = c("#7a9065","#aab982","#f2fac4"))
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/TBM/counts_indi33.pdf",width = 10,height = 5)
+
+p <- p1/p3
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/TBM/counts_all.pdf",p,width = 8,height = 10)
+```
+
+
+# Compare with PA PS
+```{r}
+library(dplyr)
+library(reshape2)
+library(patchwork)
+
+pa_h <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/pa_tf_h.csv")
+pa_net <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/pa_pro_network.csv",header = F)
+pa_net <- merge(pa_net,pa_h,by.x = "V1",by.y = "locus_tag")
+pa_net <- merge(pa_net,pa_h,by.x = "V2",by.y = "locus_tag")
+pa_net <- pa_net[,c(2,1,5,8)]
+
+ps_h <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/ps_tf_h.csv")
+ps_net <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/ps_tf_network.csv")
+# unique(ps_net$from)
+# unique(ps_net$to)
+# length(unique(pa_net$top))
+# length(unique(pa_net$bottom))
+
+# pa_net <- merge(pa_net, pa_h[,c(1,4)],by.x = "top",by.y="locus_tag" )
+# pa_net <- merge(pa_net, pa_h[,c(1,4)],by.x = "bottom",by.y="locus_tag" )
+colnames(pa_net) <- c("from","mediator","from_layer","mediator_layer")
+
+pa_net <- merge(pa_net, pa_net, by.x = "mediator",by.y="from" )
+pa_net <- pa_net[,c(2,3,1,4,5,7)]
+pa_net$path <- paste0(pa_net$from_layer.x," to ",pa_net$mediator_layer.x," to ",pa_net$mediator_layer.y)
+table(pa_net$path)
+table(pa_net$mediator_layer.x)
+
+
+table(ps_h$Modularity.class)
+#   0   1   2 
+# 147  62  54 
+# bottom middle top
+ps_net <- merge(ps_net, ps_h[,c(1,5)],by.x = "from",by.y="Source" )
+ps_net <- merge(ps_net, ps_h[,c(1,5)],by.x = "to",by.y="Source" )
+colnames(ps_net) <- c("mediator","from","from_layer","mediator_layer")
+
+ps_net <- merge(ps_net, ps_net, by.x = "mediator",by.y="from" )
+ps_net <- ps_net[,c(2,3,1,4,5,7)]
+ps_net$path <- paste0(ps_net$from_layer.x," to ",ps_net$mediator_layer.x," to ",ps_net$mediator_layer.y)
+ps_net$path <- gsub("0", "bottom", ps_net$path)
+ps_net$path <- gsub("1", "middle", ps_net$path)
+ps_net$path <- gsub("2", "top", ps_net$path)
+
+table(ps_net$path)
+table(ps_net$mediator_layer.x)
+
+count <- rel3[,c(1,3,2)]
+colnames(count) <- c("path","mediator_layer","KP")
+count <- merge(count, as.data.frame(table(pa_net$path)),by.x="path",by.y="Var1",all.x = T)
+count <- merge(count, as.data.frame(table(ps_net$path)),by.x="path",by.y="Var1",all.x = T)
+colnames(count) <- c("path","mediator_layer","KP","PA","PS")
+
+summary_data <- count %>%
+  group_by(mediator_layer) %>%
+  summarise(
+    Total_KP = sum(KP),
+    Total_PA = sum(PA),
+    Total_PS = sum(PS)
+  )
+
+df_long <- melt(count, id.vars = c("path", "mediator_layer"), measure.vars = c("KP", "PA", "PS"))
+
+a <- ggplot(df_long, aes(x=path,y=value,fill=mediator_layer))+
+  facet_grid(variable~.) +
+  geom_bar(stat = "identity") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") +
+  geom_text(aes(label = value), hjust = 0.5, vjust = -0.5, color = "black",size=2) +
+  xlab("") +
+  ylab("Count") +
+  ylim(0,6000) +
+  scale_fill_manual(values = c("#7a9065","#aab982","#f2fac4"))
+
+
+table(indi_net$from.layer.y)
+
+
+df <- data.frame(mediator=rep(c("top","middle","bottom"),3),
+                 species = c("kp","kp","kp","pa","pa","pa","ps","ps","ps"),
+                 num = c(10466,4072,3055,527,4433,4168,5949,2937,3114))
+b<- ggplot(df, aes(x=mediator,y=num,fill=mediator))+
+  facet_grid(species~.) +
+  geom_bar(stat = "identity") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = num), hjust = 0.5, vjust = -0.5, color = "black",size=2) +
+  xlab("") +
+  ylab("Count") +
+  ylim(0,12000) +
+  scale_fill_manual(values = c("#7a9065","#aab982","#f2fac4"))
+
+p <- a|b+
+  plot_layout(widths = c(3, 1))
+p
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/F4i_250603.pdf",width=20,height=10)
+```

@@ -1,0 +1,307 @@
+# KP-TF
+## init
+```{r}
+rm(list = ls())
+
+library(ggplot2)
+
+```
+
+## 1.1 370TF Pfam
+```{r}
+library(treemap)
+klebTF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+length(unique(klebTF_pfam$label))
+fam <- as.data.frame(table(klebTF_pfam$pfam))
+
+fam <- fam[order(fam$Freq,decreasing = T),]
+order <- fam[c(1:10),]$Var1
+```
+#### SF1b & F1a
+```{r}
+treemap(fam,
+        index="Var1",
+        vSize="Freq",
+        type="index")
+
+ggplot(fam[c(1:10),], aes(x=Var1, y=Freq)) +
+  geom_segment( aes(x=Var1, xend=Var1, y=0, yend=Freq), color="grey") +
+  geom_point( color="#aab982", size=4) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        # panel.border = element_blank(),
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank()
+  ) +
+  xlab("") +
+  ylab("") +
+  ylim(0,100) +
+  geom_text(aes(label = Freq), vjust = 0.5, color = "black", hjust = -0.5) +
+  coord_flip() 
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/pfam_number.pdf", width = 3.5, height = 4)
+  
+```
+
+## 1.2 all raw peaks info
+From the macs2 with p0.05 and bedtools intersect two replicates.
+```{r}
+# head -n 1 $(ls * | head -n 1) > ../merged_rawpeak.csv && tail -n +2 -q * >> ../merged_rawpeak.csv
+
+peaks <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/Zenodo/merged_rawpeak.csv",header = F,sep="")
+peaks <- peaks[peaks$V8 >= 2,]
+# table(peaks$V1)
+# NZ_CP040539.1 NZ_CP040540.1 NZ_CP040541.1 NZ_CP040542.1 NZ_CP040543.1 NZ_CP040544.1 
+#         43475          1756          1887          2704           435           398 
+```
+#### SF1c
+```{r}
+ggplot(as.data.frame(table(peaks$V1)), aes(x = Var1, y = Freq)) +
+  geom_bar(stat = "identity", fill = "lightblue") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.title = element_blank(),
+        axis.text.x=element_text(angle=45,hjust = 1,vjust=1)) +
+  xlab("") +
+  ylab("Numbers") +
+  ylim(0,50000) +
+  labs(title = "Peak numbers of 370 TF") +
+  geom_text(aes(label = Freq), vjust = -0.5, size = 3)
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF1/raw_peak_num.pdf",width=6,height=6)
+```
+
+
+#### SF1d 
+most regulated genes
+```{R}
+target <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/target.csv")
+length(unique(target$TF_candidate))
+length(setdiff(unique(target$feature),unique(target$TF_candidate)))
+
+target$tonode <- ifelse(target$Symbol == "", target$feature, target$Symbol)
+occupation <- as.data.frame(table(target$feature))
+
+
+target$tonode <- ifelse(target$Symbol == "", target$feature, target$Symbol)
+write.csv(target, "/Users/lubeifang/Desktop/Kleb_dap/files/network1.csv", quote = F)
+
+target2 <- target[target$fold.change >= 2,]
+write.csv(target2, "/Users/lubeifang/Desktop/Kleb_dap/files/network2.csv", quote = F)
+
+
+
+# ltrA
+length(unique(target[target$Symbol=="ltrA",]$feature))
+table(target[target$Symbol=="ltrA",]$feature)
+
+# rrf
+length(unique(target[target$Symbol=="rrf",]$feature))
+table(target[target$Symbol=="rrf",]$feature)
+
+df <- rbind(data.frame(name = "ltrA", as.data.frame(table(target[target$Symbol=="ltrA",]$feature))),
+            data.frame(name = "rrf", as.data.frame(table(target[target$Symbol=="rrf",]$feature))))
+
+ggplot(df,aes(x=Var1,y=Freq,fill=name))+
+  geom_bar(stat = "identity") +
+  labs(x="Gene Locus",
+       y="Counts") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.title = element_blank(),
+        axis.text.x=element_text(angle=45,hjust = 1,vjust=1)) +
+  scale_fill_manual(values = c("#9BBFCF","#98B85D"))
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF1/most_binded.pdf",width = 10,height = 5)
+```
+
+## 1.3 visulize of features
+#### F1b-c
+```{R}
+feature <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/feature.csv")
+length(unique(feature$Category))
+unique(feature$Percentage.Var1)
+
+ggplot(feature, aes(x = Category, y = Percentage.Freq, fill = Percentage.Var1)) +
+  geom_bar(stat = "identity", position = "stack",alpha = 0.6) + 
+  scale_fill_brewer(palette = "YlGnBu") +  # Use a color palette that is visually appealing
+  theme_classic() +  # Apply a minimal theme for a clean look
+  labs(
+    #title = "Distribution of 370 TF peak features",  # Add a descriptive title
+    fill = "Variable",
+    x = "370 TFs",
+    y = "features to target genes"# Legend title
+  ) +
+  theme(
+    panel.background = element_rect(fill = "transparent", color = NA),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    text = element_text(size = 12, face = "bold"),  # Enhance text size and font style
+    plot.title = element_text(hjust = 0.5),  # Center align the title
+    legend.position = "right",
+    legend.title = element_blank()# Tilt x-axis labels for better visibility
+  )
+# ggsave("feature_eachpeak.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/", width = 7, height = 4)
+
+
+allpeak <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/allpeak.csv",header = F)
+colnames(allpeak) <- c("TF","chr","start","end.x","feature","peak_name","int..10.log10qvalue.","strand.x","enrichment","X.log10pvalue","X.log10qvalue","relativesummitpositiontopeakstart","seqnames","end.y","width","strand.y","weight","peak","start_position","end_position","feature_strand","insideFeature","distancetoFeature","shortestDistance","fromOverlappingOrNearest","Name","Symbol","Protein.accession")
+fea <- as.data.frame(table(allpeak$insideFeature))
+17576/sum(fea$Freq)
+8443/sum(fea$Freq)
+(17576+8443)/sum(fea$Freq)
+
+ggplot(fea,aes(Var1,Freq,fill=Var1)) +
+  geom_bar(stat="identity",alpha=0.6)+
+  scale_fill_brewer(palette = "YlGnBu") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle=45,vjust = 1,hjust=1)) +
+  ylab("") +
+  xlab("") +
+  geom_text(aes(label = Freq), vjust = -0.5, size = 3)
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/feature_count.pdf", width = 3,height = 4)
+
+# peak numbers
+# num <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/sequenced_peaknum.csv")
+# ggplot(num, aes(x = TF, y = log(as.numeric(peak_number), 10))) +
+#   geom_bar(stat = "identity", fill = "lightblue") +
+#   theme_classic() +
+#   theme(plot.title = element_text(hjust = 0.5),
+#         axis.text.x = element_blank()) +
+#   xlab("370 TFs") +
+#   labs(title = "Peak numbers of 370 TF")
+  
+# ggplot(num, aes(x = as.numeric(peak_number))) +   
+#   geom_density(color="white", fill="aquamarine4", alpha=0.5) +
+#   labs(x="peak numer",
+#        y="Density") +
+#   theme_linedraw() +
+#   theme(panel.grid.major = element_blank(), 
+#         panel.grid.minor = element_blank())
+# ggsave("peaknumber.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/allTF/", width = 6,height = 5)
+```
+#### F1d
+```{R}
+# peak numer
+num <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/sequenced_peaknum.csv")
+summary(num$peak_number)
+p1 <- ggplot(num, aes(x = as.numeric(peak_number))) +   
+  geom_density(color="white", fill="#edf8b1", alpha=0.8) +
+  labs(x="peak nubmer",
+       y="") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  geom_vline(xintercept = 41.5, color = "darkgrey", linetype = "dashed", size = 0.6) 
+  # geom_text(aes(x = 41.5, y = 0.0075, label = paste("median = 41.5")), 
+  #           color = "black", vjust = -0.5, hjust = -0.5)  
+# peak width
+summary(allpeak$width)
+p2 <- ggplot(allpeak, aes(x=width)) +
+  geom_density(color="white", fill="#c7e9b4", alpha=0.8) +
+  labs(x="peak width",
+       y="") +
+  theme_light() +
+  xlim(0,2000) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())+
+  geom_vline(xintercept = 123.0, color = "darkgrey", linetype = "dashed", size = 0.6) 
+  # geom_text(aes(x = 123.0, y = 0.0055, label = paste("median = 123.0")), 
+  #         color = "black", vjust = -0.5, hjust = -0.5)  
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/allTF/peak_width.pdf",width = 6,height = 5)
+
+# chromosome distri
+# allpeak$summit <- (allpeak$start+allpeak$end.x)/2
+p3 <- ggplot(allpeak, aes(x=((start+end.x)/2))) +
+  geom_density(color="white", fill="#7fcdbb", alpha=0.8) +
+  labs(x="chromosome",
+       y="") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/allTF/chr_occupation.pdf",width = 6,height = 5)
+# distance to TSS
+p4 <- ggplot(allpeak, aes(x=distancetoFeature)) +
+  geom_density(color="white", fill="#41b6c4", alpha=0.8) +
+  labs(x="Distance to TSS",
+       y="") +
+  theme_light() +
+  xlim(-1000,2000) +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  geom_vline(xintercept = 0, color = "darkgrey", linetype = "dashed", size = 0.6)
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/allTF/distance.pdf",width = 6,height = 5)
+
+# pie 
+fea <- as.data.frame(table(allpeak$insideFeature))
+# pdf("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/feature_pie.pdf")
+pie(fea$Freq, labels = paste0(fea$Var1,":",round(fea$Freq/sum(fea$Freq),3)*100,"%"), edges=10)
+#dev.off()
+ggplot(fea,aes(Var1,Freq,fill=Var1)) +
+  geom_bar(stat="identity",alpha=0.6)+
+  scale_fill_brewer(palette = "YlGnBu") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle=45,vjust = 1,hjust=1)) +
+  ylab("") +
+  xlab("")
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/feature_count.pdf", width = 3,height = 4)
+
+p <- p1+p2+p3+p4
+p <- p1|p2|p3|p4 
+ggsave("density1.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/", width = 9,height = 2)
+```
+#### F1e
+```{r}
+# TF enrichment
+summary(allpeak$enrichment)
+ggplot(allpeak, aes(x= chr, y = enrichment)) +   
+  geom_violin(fill="#c7e9b4",color=NA) +
+  geom_boxplot(fill="white", width = 0.06, outlier.size = 0.05)+
+  labs(y="enrichment score",
+       x="") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank()
+        ) +
+  coord_flip()
+ggsave("boxplot.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/", width = 2.5,height = 1.4)
+```
+
+## 1.4 high-affinity TFs
+```{R}
+# affinity TF
+allpeak_enrich <- allpeak[allpeak$enrichment >= 1.87,]
+length(unique(allpeak_enrich$TF))
+length(setdiff(unique(allpeak_enrich$feature),unique(allpeak_enrich$TF)))
+allpeak_enrich$target <- ifelse(allpeak_enrich$Symbol == "", allpeak_enrich$feature,allpeak_enrich$Symbol)
+# write.csv(allpeak_enrich,"/Users/lubeifang/Desktop/highAtf.csv", quote = F, row.names = F)
+
+TF <- data.frame(cat = c("low-affinity bind", "high-affinity bind "),
+                 num = c(370 - length(unique(allpeak_enrich$TF)),length(unique(allpeak_enrich$TF))))
+promo <- data.frame(cat = c("promoter", "other"),
+                    num = c(26019,17652))
+anno <- data.frame(cat = c("annotated","unannotated"),
+                   num = c(144,226))
+```
+#### F1f
+```{r}
+pdf("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/pies.pdf")
+par(mfrow = c(1, 3))
+pie(TF$num, labels = paste0(TF$cat," TF: ",TF$num), edges=10)
+pie(promo$num, labels = paste0(promo$cat,": ",round(promo$num/sum(promo$num),3)*100,"%"), edges=9)
+pie(anno$num, labels = paste0(anno$cat,": ",round(anno$num/sum(anno$num),3)*100,"%"), edges=10)
+dev.off()
+```

@@ -1,0 +1,578 @@
+#BLAST analysis
+## blast results
+```{R}
+rm(list=ls())
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+blast=read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/kp_results.txt", sep = "\t", header = F)
+blast$V1 <- sapply(strsplit(blast$V1, ":"), `[`, 1)
+colnames(blast) = c("Query_id","Subject_id","Identity","Align_length","Miss_match",
+                    "Gap","Query_start","Query_end","Subject_start","Subject_end","E_value","Score")
+length(unique(blast$Subject_id))
+
+blast_f <-arrange(blast, desc(Score)) %>%
+  distinct(Query_id, Subject_id, .keep_all = T)
+blast_f <- blast_f[blast_f$Identity >= 99 & blast_f$E_value <= 0.001,]
+
+ncbi <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/geo/ncbi_dataset.tsv", sep = "\t", header = T)
+geo <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/geo/extracted_biosample_info.csv")
+geo <- merge(ncbi[,c(1,3,17)],geo[,c(1,2)],by.x="Assembly.BioSample.Accession",by.y="BioSample")
+name <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/geo/2058_kps.csv")
+name <- merge(name[,c(1:3)],geo,by.x="refseq",by.y="Assembly.Accession",all.x=T)
+name$Geographic.Location <- ifelse(is.na(name$Geographic.Location), "no_info",name$Geographic.Location)
+
+blast_f <- merge(blast_f,name[,c(1,2,6)],by.x="Subject_id",by.y="chr")
+
+
+length(unique(blast_f$Subject_id))
+length(unique(blast_f$Query_id))
+
+
+st <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/geo/kleborate_out.txt", sep = "\t", header = T,skip = 1,)
+st <- st[st$species == "Klebsiella pneumoniae",]
+# setdiff(name$refseq,st$strain)
+st_count <- data.frame(table(st$ST))
+st_count$st <- ifelse(st_count$Freq <= 10, "others", as.character(st_count$Var1))
+st <- merge(st,st_count,by.x="ST",by.y="Var1")
+st <- merge(st,geo,by.x="strain",by.y="Assembly.Accession",all.x=T)
+
+st_count$label <- paste0("n=",st_count$Freq)
+
+
+st$Geographic.Location <- ifelse(is.na(st$Geographic.Location), "no_info",st$Geographic.Location)
+country_count <- data.frame(table(st$Geographic.Location))
+country_count$geo <- ifelse(country_count$Freq < 10, "others", as.character(country_count$Var1))
+st <- merge(st,country_count,by.x="Geographic.Location",by.y="Var1")
+
+blast_g <- merge(blast_f,st[,c(2,3,6,7,11,15)],by.x="refseq",by.y="strain")
+
+ggplot(blast_g, aes(x=st, y=Identity, fill=st)) + 
+  geom_violin(width=1,drop = T,color=NA) +
+  theme_bw() +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45,vjust=1,hjust=1)) +
+  geom_text(data = st_count,aes(x=st,y=99,label=label), vjust=-0.3)
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/st_identity.pdf",width = 15, height = 3)
+```
+
+##cluster identity
+```{r}
+klebTF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+results <- pivot_wider(blast_g[,c(1,3,4)], names_from = refseq, values_from = Identity, values_fill = list(Identity= 0))
+
+
+library(pheatmap)
+matrix <- as.matrix(results[,2:2059])
+rownames(matrix) <- results$Query_id
+
+pheatmap_result <- pheatmap(matrix,
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "euclidean",
+         clustering_method = "complete",
+         show_rownames = F,
+         show_colnames = TRUE,
+         fontsize_row = 8,
+         height = 8,
+         width=5,
+         legend = T,
+         filename = "/Users/lubeifang/Desktop/test.pdf")
+# cluster into 6 clusters
+row_clusters <- cutree(pheatmap_result$tree_row, k = 6)
+table(row_clusters)
+# add annotation
+annotation_row <- data.frame(Cluster = factor(row_clusters))
+rownames(annotation_row) <- results$Query_id
+
+
+pheatmap(matrix, 
+         clustering_distance_rows = "correlation", 
+         clustering_distance_cols = "euclidean", 
+         clustering_method = "complete", 
+         show_rownames = F, 
+         show_colnames = F, 
+         fontsize_row = 8,
+         height = 4,
+         width = 5,
+         legend = TRUE,
+         annotation_row = annotation_row,
+         filename = "/Users/lubeifang/Desktop/kp_strainTF_identity_heatmap.pdf")
+
+
+
+cluster <- data.frame(name = results$Query_id, Cluster = row_clusters)
+# merge with klebTF_pfam
+cluster <- merge(cluster, klebTF_pfam[,c(14,18)], by.x="name", by.y="Gene", all.x=T)
+pfam_table <- rbind(data.frame(cluster = 1, table(cluster[cluster$Cluster == 1,]$pfam)),
+                    data.frame(cluster = 2, table(cluster[cluster$Cluster == 2,]$pfam)),
+                    data.frame(cluster = 3, table(cluster[cluster$Cluster == 3,]$pfam)),
+                    data.frame(cluster = 4, table(cluster[cluster$Cluster == 4,]$pfam)),
+                    data.frame(cluster = 5, table(cluster[cluster$Cluster == 5,]$pfam)),
+                    data.frame(cluster = 6, table(cluster[cluster$Cluster == 6,]$pfam)))
+
+ggplot(data.frame(cluster = 1, table(cluster[cluster$Cluster == 1,]$pfam)), aes(x = "", y = Freq, fill = Var1)) +
+  geom_bar(stat = "identity",width = 0.1) +
+  # geom_text(aes(label = Freq), position = position_stack(vjust = 0.5)) +
+  theme_void()
+ggsave("/Users/lubeifang/Desktop/c.pdf",width = 6,height = 4)
+
+write.csv(annotation_row,"/Users/lubeifang/Desktop/Kleb_dap/files/2059strain_6cluster.csv",row.names = T)
+```
+
+
+## core TF
+```{R}
+library(aplot)
+core_TF <- as.data.frame(table(blast_g$Query_id))
+# Create label of unique, accessory and unique
+core_TF$label <- ifelse(core_TF$Freq >= 2000, "core", ifelse(core_TF$Freq <= 20, "unique", "accessory"))
+
+order = core_TF[order(core_TF$Freq,decreasing = T),]$Var1
+# label the core accessory and unique
+group1 <- ggplot(core_TF,aes(x=Var1,y="group",fill=label))+
+  geom_tile() + 
+  scale_y_discrete(position="right") +
+  theme_void() +
+  theme(axis.text.x = element_blank())+
+  scale_x_discrete(limits = order) +
+  scale_fill_manual(values = c("#B7D4EA","#2E7EBB"))
+
+p <- ggplot(blast_f, aes(x=Query_id, y=Subject_id, fill= Identity)) + 
+  scale_fill_gradientn(colors = rev(hcl.colors(10, "YlGnBu"))) +
+  geom_tile()+
+  theme_classic()+
+  scale_x_discrete(limits = order) +
+  theme(
+    panel.background = element_rect(fill = "transparent", color = NA),
+    plot.background = element_rect(fill = "transparent", color = NA),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()) +
+  xlab("370 TFs") +
+  ylab("2058 KP strains")
+
+p %>%
+  insert_top(group1, height = .04)
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/evo.pdf",width = 6, height = 3)
+```
+
+## plot
+```{R}
+summary(core_TF$Freq)
+
+TFinS <- as.data.frame(table(blast_g$refseq))
+TFinS <- merge(TFinS,st[,c(2,5:6,9:10)],by.x="Var1",by.y="strain")
+summary(TFinS$Freq)
+
+df <- rbind (data.frame(cate = "TF", num = core_TF$Freq))
+
+p1 <- ggplot(df,aes(x=cate,y=num,fill=cate)) +
+  geom_violin(color=NA,width=0.5) +
+  geom_boxplot(width = 0.1, outliers = F) +
+  coord_flip() +
+  theme_bw() +
+  scale_fill_brewer(palette = 1) +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+df <- rbind (data.frame(cate = "strain", num = TFinS$Freq))
+  
+p2 <- ggplot(df,aes(x=cate,y=num,fill=cate)) +
+  geom_violin(color=NA,width=0.5) +
+  geom_boxplot(width = 0.1, outliers = F) +
+  coord_flip() +
+  theme_bw() +
+  scale_fill_brewer(palette = 2) +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())  
+
+p <- p1/p2
+p
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/num.pdf",width = 3.5,height = 3)
+
+```
+
+
+## ST type with tf
+```{r}
+library(tidyverse)
+library(igraph)
+library(ggraph)
+
+# How many TFs exsits in one ST type
+st_tf <- blast_g %>%
+  subset(st!="others") %>%
+  group_by(st) %>%
+  summarise(TF_Set = list(unique(Query_id))) %>%
+  ungroup()
+st_names <- st_tf$st
+tf_sets <- st_tf$TF_Set
+
+# find the unique TF in each PubMLST_ST
+unique_tf <- st_tf %>%
+  mutate(Unique_TF = lapply(TF_Set, function(tf_set, all_sets) {
+    other_sets <- setdiff(all_sets, list(tf_set))
+    other_tfs <- unique(unlist(other_sets))
+    setdiff(tf_set, other_tfs)
+  }, all_sets = st_tf$TF_Set)) %>%
+  mutate(
+    TF_Set = sapply(TF_Set, function(x) paste(x, collapse = ",")),
+    Unique_TF = sapply(Unique_TF, function(x) paste(x, collapse = ",")),
+    num = sapply(TF_Set, length) 
+  ) %>%
+  mutate(
+    num = sapply(TF_Set, function(x) length(unlist(strsplit(x, ","))))
+  )
+
+# write.csv(st_tf, "/Users/lubeifang/Desktop/ST_TF.csv", row.names = FALSE)
+
+```
+
+
+### mst
+```{r}
+library(scatterpie)
+jaccard_distance <- function(set1, set2) {
+  intersect_len <- length(intersect(set1, set2))
+  union_len <- length(union(set1, set2))
+  return(1 - (intersect_len / union_len))  # Jaccard distance = 1 - Jaccard similarity
+}
+
+n <- length(tf_sets)
+dist_matrix <- matrix(0, n, n, dimnames = list(st_names, st_names))
+for (i in 1:n) {
+  for (j in 1:n) {
+    dist_matrix[i, j] <- jaccard_distance(tf_sets[[i]], tf_sets[[j]])
+  }
+}
+
+
+g <- graph_from_adjacency_matrix(dist_matrix, mode = "undirected", weighted = TRUE)
+g_mst <- mst(g)
+
+
+# location
+location_distribution <- blast_g %>%
+  group_by(st, geo) %>%
+  summarise(count = n(), .groups = "drop") %>% # 计算每个 geo 内的 count
+  group_by(st) %>% # 按 st 分组
+  mutate(freq = count / sum(count)) %>% # 在每个 st 的范围内计算 freq
+  ungroup()
+
+
+layout <- ggraph::create_layout(g_mst, layout = "kk")
+
+node_positions <- layout %>%
+  as_tibble() %>%
+  select(name, x, y)
+
+plot_data <- location_distribution %>%
+  pivot_wider(
+    names_from = geo,  # 将地理位置展开为列
+    values_from = freq,                # 使用频率作为列的值
+    values_fill = 0                    # 缺失值填充为 0
+  ) %>%
+  left_join(node_positions, by = c("st" = "name")) %>%
+  subset(st != "others")  
+
+node_data <- location_distribution %>%
+  group_by(st) %>%
+  summarise(location_data = list(data.frame(location = geo, freq = freq)))%>%
+  subset(st != "others")
+
+V(g_mst)$location_data <- node_data$location_data[match(V(g_mst)$name, node_data$st)]
+
+
+ggraph(g_mst, layout = "kk") +
+  geom_edge_link(alpha = 0.8, color = "grey") +
+  geom_node_point(size = 10, color = "lightblue") +
+  geom_node_text(aes(x = x, y = y-0.2, label = name), size = 3, color = "black") +
+  geom_scatterpie(
+    aes(x = x, y = y, group = st, r = 0.1),
+    data = plot_data,
+    cols = unique(location_distribution$geo)
+  ) +
+  theme_void() +
+  labs(title = "MST with Geographic Distribution")
+ggsave("/Users/lubeifang/Desktop/a.pdf",width = 10,height = 8.5)
+
+
+# pdf("/Users/lubeifang/Desktop/mst_test2.pdf",width=10,height = 15)
+# plot(
+#   g_mst,
+#   layout=layout_with_kk,
+#   vertex.color = "lightblue",
+#   vertex.size = 10,
+#   vertex.frame.color = "grey",
+#   vertex.label = st_names,
+#   vertex.label.cex = 1,
+#   vertex.label.color = "black",
+#   main = "MST of ST-TF based on Jaccard Distance"
+# )
+# dev.off()
+
+```
+
+
+
+## tf with geo
+```{r}
+library(sf)
+library(rnaturalearth)
+library(ggplot2)
+
+
+geo_tf <- blast_g %>%
+  subset(geo!="others"&geo!="no_info") %>%
+  group_by(geo) %>%
+  summarise(TF_Set = list(unique(Query_id))) %>%
+  ungroup()
+
+
+unique_tf <- geo_tf %>%
+  mutate(Unique_TF = lapply(TF_Set, function(tf_set, all_sets) {
+    other_sets <- setdiff(all_sets, list(tf_set))
+    other_tfs <- unique(unlist(other_sets))
+    setdiff(tf_set, other_tfs)
+  }, all_sets = geo_tf$TF_Set)) %>%
+  mutate(
+    TF_Set = sapply(TF_Set, function(x) paste(x, collapse = ",")),
+    Unique_TF = sapply(Unique_TF, function(x) paste(x, collapse = ",")),
+    num = sapply(TF_Set, length) 
+  ) %>%
+  mutate(
+    num = sapply(TF_Set, function(x) length(unlist(strsplit(x, ","))))
+  )
+```
+
+
+
+## geo with st
+```{r}
+library(sf)
+library(rnaturalearth)
+library(ggplot2)
+
+
+# geo_st <- st %>%
+#   group_by(Geographic.Location) %>%
+#   summarise(st_Set = list(unique(ST))) %>%
+#   ungroup()
+
+geo_st <- st %>%
+  subset(geo!="others"&geo!="no_info"&st!="others") %>%
+  group_by(geo) %>%
+  summarise(st_Set = list(unique(st))) %>%
+  ungroup()
+
+
+unique_st <- geo_st %>%
+  mutate(Unique_st = lapply(st_Set, function(st_set, all_sets) {
+    other_sets <- setdiff(all_sets, list(st_set))
+    other_sts <- unique(unlist(other_sets))
+    setdiff(st_set, other_sts)
+  }, all_sets = geo_st$st_Set)) %>%
+  mutate(
+    st_Set = sapply(st_Set, function(x) paste(x, collapse = ",")),
+    Unique_st = sapply(Unique_st, function(x) paste(x, collapse = ",")),
+    num = sapply(st_Set, length) 
+  ) %>%
+  mutate(
+    num = sapply(st_Set, function(x) length(unlist(strsplit(x, ","))))
+  )
+```
+
+
+### world map
+```{r}
+library(scatterpie)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+location_distribution <- st %>%
+  group_by(geo, st) %>%
+  summarise(count = n(), .groups = "drop") %>% 
+  group_by(geo) %>% 
+  mutate(freq = count / sum(count)) %>% 
+  ungroup()
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+country_coords <- world %>%
+  mutate(centroid = st_centroid(geometry)) %>% # 计算质心
+  mutate(lon = st_coordinates(centroid)[, 1], # 提取经度
+         lat = st_coordinates(centroid)[, 2]) %>% # 提取纬度
+  select(name_long, lon, lat) %>% # 保留国家名称和坐标
+  st_drop_geometry() # 移除几何信息，返回普通数据框
+
+geo_coordinates  <- country_coords %>%
+  filter(name_long %in% country_count[country_count$Freq > 10,]$Var1)
+# setdiff(country_count[country_count$Freq > 10,]$Var1,geo_coordinates$name_long)
+geo_coordinates <- rbind(geo_coordinates, data.frame(name_long = c("Russia","South Korea", "USA"),
+                                                     lon = c(95.64138,127.8348,-103.629563),
+                                                     lat = c(66.031722,44.74373,36.37337)))
+colnames(geo_coordinates)[1] <- "geo"
+
+
+
+plot_data <- location_distribution %>%
+  pivot_wider(
+    names_from = st,  # 将地理位置展开为列
+    values_from = freq,                # 使用频率作为列的值
+    values_fill = 0                    # 缺失值填充为 0
+  ) %>%
+  left_join(geo_coordinates, by = "geo") %>%
+  subset(geo != "no_info" & geo != "others")  
+
+
+plot_data_new <- plot_data[plot_data$geo != ""]
+ggplot(data = world) +
+  geom_sf() + # 绘制地图背景
+  geom_scatterpie(
+    aes(x = lon, y = lat, group = geo, r = 10), # r 控制饼图大小
+    data = plot_data,
+    cols = unique(location_distribution$st),
+    alpha = 0.8,
+    color = "grey",
+    cex = 0.2
+  ) +
+  coord_sf() +
+  theme_void() +
+  labs(
+    title = "Global Distribution of ST Types",
+    fill = "ST Types"
+  ) +
+  geom_text(
+    aes(x = lon, y = lat, label = geo), # 使用国家名称作为标签
+    data = plot_data,
+    size = 2, # 标签大小
+    nudge_y = 5 # 调整标签位置
+  ) 
+
+ggsave("/Users/lubeifang/Desktop/b.pdf",width = 10,height = 8.5)
+```
+
+
+
+# SNP analysis
+
+## Snippy-multi whole genome
+```{R}
+rm(list=ls())
+library(data.table)
+
+core <- fread("/Users/lubeifang/Desktop/Kleb_dap/snp/core.vcf",skip = 2)
+table(core$INFO)
+table(core$ALT)
+
+ggplot(core, aes(x=POS)) +
+  geom_density(color="white", fill="#41b6c4", alpha=0.8) +
+  labs(x="Chromosome",
+       y="") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/SNP_pos.pdf",width = 6,height = 5)
+
+```
+
+## SNP at TF
+```{R}
+coretf <- fread("/Users/lubeifang/Desktop/Kleb_dap/snp/TF.vcf",skip = 0)
+colnames(coretf) <- colnames(core)
+table(coretf$INFO)
+table(coretf$POS)
+
+tfname <- fread("/Users/lubeifang/Desktop/Kleb_dap/snp/TF_name_with_SNP.vcf",skip = 0)
+coretf$name <- tfname$V4
+counts_tf <- as.data.frame(table(tfname$V4))
+counts_s <- as.data.frame(colSums(coretf[,c(10:2071)]))
+counts_s$s <- rownames(counts_s)
+
+
+# 
+# ggplot(coretf, aes(x=POS)) +
+#   geom_density(color="white", fill="#41b6c4", alpha=0.8) +
+#   labs(x="Chromosome",
+#        y="") +
+#   theme_light() +
+#   theme(panel.grid.major = element_blank(), 
+#         panel.grid.minor = element_blank())
+# # ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/TF_SNP_pos.pdf",width = 6,height = 5)
+
+
+# histogram of all SNP and TF SNP
+ggplot() +
+  geom_histogram(data = core, aes(x = POS, color = "whole_genome", fill = "whole_genome"), alpha = 0.5) +
+  geom_histogram(data = coretf, aes(x = POS, color = "TF_region", fill = "TF_region"), alpha = 0.5) +
+  scale_color_manual(values = c("whole_genome" = "#469990", "TF_region" = "#C0B09B")) +
+  scale_fill_manual(values = c("whole_genome" = "#469990", "TF_region" = "#C0B09B")) +
+  labs(x = "",
+       y = "Density",
+       color = "Legend",
+       fill = "Legend") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.85,0.82),
+        legend.background = element_rect(color = "darkgrey", size = 0.5, linetype = "solid"))
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/histogram.pdf",width = 6,height = 4)
+
+
+# barplot of strains contains
+temp <- counts_s[order(counts_s$`colSums(coretf[, c(10:2071)])`,decreasing = T),][c(1:11),]
+temp$s <- factor(temp$s, levels = temp$s)
+p1<-ggplot(temp, aes(y=`colSums(coretf[, c(10:2071)])`, x=s))+
+  geom_segment( aes(x=s, yend=`colSums(coretf[, c(10:2071)])`, y=0, xend=s), color="grey") +
+  geom_point(color="#41b6c4",size=4) +
+  theme_light() +
+  xlab("") +
+  ylab("Counts") +
+  ggtitle("Number of TF-region SNPs per strain")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45,hjust = 1)) +
+  geom_text(aes(label = `colSums(coretf[, c(10:2071)])`), vjust = -1,color = "black", size = 3)+
+  ylim(0,5000)
+
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/Counts_perS.pdf",width = 6,height = 4)
+
+
+# barplot of strains contains
+temp2 <- counts_tf[order(counts_tf$Freq,decreasing = T),][c(1:5,110,151:155),]
+temp2$Var1 <- factor(temp2$Var1, levels = temp2$Var1)
+p2<-ggplot(temp2, aes(y=Freq, x=Var1))+
+  geom_segment( aes(x=Var1, yend=Freq, y=0, xend=Var1), color="grey") +
+  geom_point(color="#41b6c4",size=4) +
+  theme_light() +
+  xlab("") +
+  ylab("Counts") +
+  ggtitle("Number of SNPs per TF")+
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(angle = 45,hjust = 1)) +
+  geom_text(aes(label = Freq), vjust = -1,color = "black", size = 3)+
+  ylim(0,450)
+
+p <- p1/p2
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/Counts_SNP2.pdf",p,width = 6,height = 7)
+```
+
+
+#SNP with BLAST
+```{R}
+core_TF
+colnames(core_TF) <- c("TF","TFinS","Label")
+counts_tf 
+colnames(counts_tf) <- c("TF","SNP")
+
+merge <- merge(core_TF,counts_tf, by="TF",all.x=T)
+```

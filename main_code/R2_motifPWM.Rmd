@@ -1,0 +1,181 @@
+# KP-TF
+```{R}
+rm(list=ls())
+library(ggplot2)
+```
+
+#### F1g
+```{r}
+motif_record <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/PWM&motif/kp_motif/motif_record.csv")
+summary(motif_record$width)
+summary(motif_record$sites)
+summary(motif_record$evalue)
+
+ggplot() +
+  geom_density(data = motif_record, aes(x = -log10(evalue), color = "-log10(e-value)", fill = "-log10(e-value)"), alpha = 0.5) +
+  geom_density(data = motif_record, aes(x = width, color = "Width", fill = "Width"), alpha = 0.5) +
+  geom_density(data = motif_record, aes(x = sites, color = "Sites", fill = "Sites"), alpha = 0.5) +
+  scale_color_manual(values = c("-log10(e-value)" = "#469990", "Width" = "#5976ba", "Sites" = "#C0B09B")) +
+  scale_fill_manual(values = c("-log10(e-value)" = "#469990", "Width" = "#5976ba", "Sites" = "#C0B09B")) +
+  labs(x = "",
+       y = "Density",
+       color = "Legend",
+       fill = "Legend") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = c(0.85,0.76),
+        legend.background = element_rect(color = "darkgrey", size = 0.5, linetype = "solid")) +
+  xlim(0, 1000)
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/motif.density.pdf",width = 6,height = 3.5)
+
+```
+
+## fasta extraction and Calculate PWM
+```{R}
+library(Biostrings)
+library(GenomicRanges)
+library(memes)
+library(TFBSTools) 
+library(stats)
+library(ggtree)
+library(ggplot2)
+
+# read fasta
+fasta_file <- "/Users/lubeifang/Desktop/BIOTOOLS/ref/hvkp4_meme.fasta"
+kp_stringset <- readDNAStringSet(fasta_file)
+
+# read peak
+# peak.list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/")
+peak.list <- unique(motif_record$TF)
+
+# calculate PWM and gather in one list
+pwm.list <- list()
+pwm.name <- c()
+for (i in peak.list){
+  print(i)
+  peak <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/",i,".csv"),header = T)
+  
+ # write fasta
+  gR <- GRanges(seqnames = "chr1",
+                ranges = IRanges(start = peak$start, end = peak$end.x),
+                strand = "*")
+  gR <- resize(gR,50, "center")
+  sequences <- get_sequence(gR, kp_stringset)
+  name <- sub("\\..*", "", i)
+  pwm.name[[length(pwm.name)+1]] <- name
+  # writeXStringSet(sequences, paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/peak_fasta/",name,".fasta"), append=FALSE,
+  #               compress=FALSE, compression_level=NA, format="fasta")
+  pwm <- PWM(sequences,type = "log2probratio", prior.params = c(A=0.25, C=0.25, G=0.25, T=0.25))
+  pwm.list[[length(pwm.list)+1]] <- pwm
+}
+
+
+# calculate the similarity between two pwm
+distance_matrix <- matrix(nrow = length(pwm.list), ncol = length(pwm.list))
+for (i in 1:length(pwm.list)) {
+  for (j in i:length(pwm.list)) {
+    if (i == j) {
+      distance_matrix[i, j] <- 0
+    } else {
+      sim <- PWMSimilarity(pwm.list[[i]], pwm.list[[j]], method = "Euclidean")
+      distance_matrix[i, j] <- sim
+      distance_matrix[j, i] <- sim 
+    }
+  }
+}
+rownames(distance_matrix) <- pwm.name
+
+hc <- hclust(as.dist(distance_matrix), method = "complete")
+plot(hc)
+
+library(ape)
+tree <- as.phylo(hc)
+write.tree(tree, file = "/Users/lubeifang/Desktop/tree_newick_127.nwk")
+clusters <- cutree(hc, k = 2) 
+group = as.data.frame(clusters)
+group$TF <- row.names(group)
+cluster2 <- merge(motif_record,group,by="TF")
+
+
+
+# ggtree(tree,layout = "circular") + 
+#   geom_tiplab() +  
+#   theme_tree2() +  
+#   ggtitle("Hierarchical clustering of PWM") +  
+#   xlab("Distance") +  
+#   ylab("TFs") 
+# ggsave(file="test.pdf", path = "/Users/lubeifang/Desktop/", width = 20, height = 20,limitsize = FALSE)
+```
+
+
+
+## motif p-value plot
+#### SF2b
+```{R}
+library(ggpubr)
+library(scales)
+
+detail <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/PWM&motif/motif_cluster/RS20810/motif_detail.csv")
+detail$TF <- factor(detail$TF, levels = rev(detail$TF))
+
+p1<-ggplot(detail, aes(x=TF,y=-log10(evalue),group=1))+
+  geom_point(size=3,color="#6FB585")+
+  geom_line(color="#6FB585") + 
+  scale_y_continuous(expand = c(0,0),limits = c(0,200),
+                        sec.axis = sec_axis(~.*4,
+                                            name = 'number of sites',
+                                            breaks = seq(0,800,100))) +
+  geom_line(aes(x=TF,y=sites/4), color="#E8BF80") +
+  geom_point(aes(x=TF,y=sites/4),size=3,color="#E8BF80") +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/PWM&motif/motif_cluster1.pdf", width = 4, height = 4.5)
+
+
+
+detail <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/PWM&motif/motif_cluster/motif_kind/motif_detail2.csv")
+detail$TF <- factor(detail$TF, levels = rev(detail$TF))
+ggplot(detail[c(2,3,5),], aes(x=TF,y=-log10(evalue),group=1))+
+  geom_point(size=3,color="#6FB585")+
+  geom_line(color="#6FB585") + 
+  scale_y_continuous(expand = c(0,0),limits = c(0,50),
+                        sec.axis = sec_axis(~.*4,
+                                            name = 'number of sites',
+                                            breaks = seq(0,200,100))) +
+  geom_line(aes(x=TF,y=sites/4), color="#E8BF80") +
+  geom_point(aes(x=TF,y=sites/4),size=3,color="#E8BF80") +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF1/motif_cluster4.pdf", width = 4, height = 4.5)
+
+detail <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure1/PWM&motif/motif_cluster/motif_kind/motif_detail3.csv")
+detail$TF <- factor(detail$TF, levels = rev(detail$TF))
+ggplot(detail, aes(x=TF,y=-log10(evalue),group=1))+
+  geom_point(size=3,color="#6FB585")+
+  geom_line(color="#6FB585") + 
+  scale_y_continuous(expand = c(0,0),limits = c(0,100),
+                        sec.axis = sec_axis(~.*4,
+                                            name = 'number of sites',
+                                            breaks = seq(0,400,100))) +
+  geom_line(aes(x=TF,y=sites/4), color="#E8BF80") +
+  geom_point(aes(x=TF,y=sites/4),size=3,color="#E8BF80") +
+  coord_flip() +
+  theme_light() +
+  xlab("") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF1//motif_cluster5.pdf", width = 4, height = 4.5)
+p <- p1+p2+p3
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/PWM&motif/evalue_sites.pdf", width = 12, height = 4.5)
+```
+
+
+

@@ -1,0 +1,150 @@
+```{R}
+rm(list=ls())
+library(ChIPseeker)
+library(ChIPpeakAnno)
+library(clusterProfiler)
+require(GenomicFeatures)
+library(GenomicRanges)
+library(readxl)
+library(ggplot2)
+library(devEMF)
+library(Biostrings)
+library(memes)
+library(dplyr)
+getwd()
+
+##### Kleb-DAPseq #####
+############Kleb hvkp4###############
+########come on PEAKS!!!###########
+# load annotation
+hvkp4_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/BIOTOOLS/ref/CHIPPEAKANNO/hvkp4.gff")
+hvkp4_annoData <- toGRanges(hvkp4_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno0531.csv")
+TF_name <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+
+# read fasta
+fasta_file <- "/Users/lubeifang/Desktop/BIOTOOLS/ref/hvkp4_meme.fasta"
+kp_stringset <- readDNAStringSet(fasta_file)
+
+
+# define peak anno fuction
+peak.anno <- function(peak.file){
+  peak <- peak.file
+  peak_gr <- GRanges(seqnames=peak.file$chr,
+                     ranges=IRanges(start=as.numeric(as.matrix(peak[,2])),
+                                    end= as.numeric(as.matrix(peak[,3])),
+                                    names=as.matrix(as.matrix(peak[,4])),
+                                    weight=as.numeric(peak[,5])))
+  annotatedpeak <- annotatePeakInBatch(peak_gr, AnnotationData=hvkp4_annoData)
+  df <- as.data.frame(annotatedpeak)
+  return(df)
+}
+
+# read fasta
+fasta_file <- "/Users/lubeifang/Desktop/BIOTOOLS/ref/hvkp4_meme.fasta"
+kp_stringset <- readDNAStringSet(fasta_file)
+
+# read peak
+peak.list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/peaks/peak_bed/")
+for (i in peak.list){
+  print(i)
+  peaks <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/peak_bed/",i),sep = "\t", header = F)
+  col_names <- c("chr", "start", "end", "peak_name", "score",
+                 "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+                 "relativesummitpositiontopeakstart")
+  colnames(peaks) <- col_names
+  # exclude the chr
+  peaks <- peaks[peaks$`-log10pvalue` >= 2 & peaks$signalValue >= 1.625,]
+  if (nrow(peaks) > 30){
+    peaks$chr <- case_when(
+      peaks$chr == "NZ_CP040539.1" ~ "chr1",
+      peaks$chr == "NZ_CP040540.1" ~ "chr2",
+      peaks$chr == "NZ_CP040542.1" ~ "chr3",
+      peaks$chr == "NZ_CP040543.1" ~ "chr4",
+      peaks$chr == "NZ_CP040544.1" ~ "chr5",
+      peaks$chr == "NZ_CP040541.1" ~ "chr6",
+      TRUE ~ NA_character_ )
+    
+    peaks.annotated <- peak.anno(peaks)
+    anno <- merge(peaks,peaks.annotated, by="start", sort = F, all.x = T)
+    anno <- merge(anno, gene_anno, by.x = "feature", by.y = "Locus.tag",all.x=T)
+    anno <- anno[order(anno$"signalValue",decreasing=T),]
+    anno <- anno[,c(3,2,4,1,5:27)]
+    name <- sub("\\..*", "", i)
+    name <- sub("_.*","",name)
+    
+    # Change to the gene name
+    gene_name <- TF_name[TF_name$label == name, "Gene"]
+    anno <- data.frame(TF = gene_name, as.data.frame(anno))
+    
+    write.csv(anno,paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/forML/test/",gene_name,".csv"),row.names = F)
+  
+
+    gR <- GRanges(seqnames = anno$chr,
+                  ranges = IRanges(start = anno$start, end = anno$end.x),
+                  strand = "*")
+    gR <- resize(gR,201, "center")
+    sequences <- get_sequence(gR, kp_stringset)
+    writeXStringSet(sequences, paste0("/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail3/",gene_name,".fasta"), append=FALSE,
+                    compress=FALSE, compression_level=NA, format="fasta")
+  }
+}
+
+# summary(width(gR))
+# seqlengths(kp_stringset)
+off_limits <- which(
+  start(gR) < 1 |
+    end(gR) > seqlengths(kp_stringset)[as.character(seqnames(gR))]
+)
+```
+
+```{r}
+allpeak <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail2_p3n30/allpeak_p3n30.csv",header = F)
+allpeak <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail3/allpeak_96TF.csv",header = F)
+colnames(allpeak) <- c("TF","chr","start","end.x","feature","peak_name","int..10.log10qvalue.","strand.x","enrichment","X.log10pvalue","X.log10qvalue","relativesummitpositiontopeakstart","seqnames","end.y","width","strand.y","weight","peak","start_position","end_position","feature_strand","insideFeature","distancetoFeature","shortestDistance","fromOverlappingOrNearest","Name","Symbol","Protein.accession")
+
+tf_counts <- data.frame(table(allpeak$TF))
+colnames(tf_counts) <- c("TF", "Count")  
+sum(tf_counts$Freq)
+write.csv(tf_counts,"/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail3/tf_list.csv")
+
+ggplot(tf_counts, aes(x = TF, y = Count)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(
+    title = "Distribution of Transcription Factor (TF) Counts",
+    x = "Number of Peaks per TF",
+    y = "Frequency"
+  ) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label=Count), vjust = -0.3, size = 3)
+
+
+```
+
+
+# make df for neg peak consturction
+```{r}
+peak.list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/peaks/peak_bed/")
+for (i in peak.list){
+  print(i)
+  name <- sub("\\..*", "", i)
+  name <- sub("_.*","",name)
+    
+  # Change to the gene name
+  gene_name <- TF_name[TF_name$label == name, "Gene"]
+  
+  if (gene_name %in% tf_counts$TF){
+    print("yes")
+    peaks <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/peak_bed/",i),sep = "\t", header = F)
+    col_names <- c("chr", "start", "end", "peak_name", "score",
+                 "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+                 "relativesummitpositiontopeakstart")
+    colnames(peaks) <- col_names
+    df <- data.frame(TF = gene_name, as.data.frame(peaks))
+    write.csv(df,paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/forML/allpeak_27TF/",gene_name,".csv"),row.names = F)
+  }
+}
+
+write.csv(tf_counts,"/Users/lubeifang/Desktop/a.csv")
+```

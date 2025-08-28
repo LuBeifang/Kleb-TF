@@ -1,0 +1,826 @@
+# Mutant
+## load count and calculate DEG
+```{R}
+rm(list=ls())
+library(ggplot2)
+library(dplyr)
+library(clusterProfiler)
+library(DESeq2)
+library(ggpubr)
+library(ggrepel)
+library(corrplot)
+
+
+TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+count = read.csv('/Users/lubeifang/Desktop/Kleb_dap/files/mu_counts0810.txt', header = T, 
+                 sep = '\t', skip = 1)
+M<-cor(count[,c(7:36)],method = "pearson")
+# pdf("/Users/lubeifang/Desktop/a.pdf")
+corrplot(M,  method = 'color')
+# dev.off()
+rownames(count)<-count[,1]
+
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno.tsv", sep = "\t")
+gene_anno$length <- gene_anno$End - gene_anno$Begin + 1
+
+gene2go <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/gene2go.csv")
+go2term <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/go2term.csv")
+```
+
+
+## Calculate DEG
+```{r}
+deglist1 <- data.frame()
+degnum1 <- data.frame()
+GOlist1 <- data.frame()
+
+Mu00760_mid <- count[,c(31:33,7:9)]
+Mu00760_stat <- count[,c(34:36,10:12)]
+Mu12175_mid <- count[,c(31:33,13:15)]
+Mu12175_stat <- count[,c(34:36,16:18)]
+Mu15210_mid <- count[,c(31:33,19:21)]
+Mu15210_stat <- count[,c(34:36,22:24)]
+Mu21375_mid <- count[,c(31:33,25:27)]
+Mu21375_stat <- count[,c(34:36,28:30)]
+
+
+for ( i in c("Mu00760_mid","Mu00760_stat","Mu12175_mid","Mu12175_stat","Mu15210_mid","Mu15210_stat","Mu21375_mid","Mu21375_stat")){
+# for ( i in c("Mu12175_mid")){
+  print(i)
+  ae <- get(i)
+  condition <- factor(c(rep("control",3), rep("treat",3)))
+  coldata <- data.frame(row.names = colnames(ae), condition)
+  head(coldata)
+  
+  dds <- DESeqDataSetFromMatrix(countData=ae, colData=coldata,design=~condition)
+  dim(dds)
+  dds <- DESeq(dds)
+  vsdata <- vst(dds, blind=FALSE)
+  res <- results(dds,contrast = c('condition', 'treat', 'control'))
+  res <- res[order(res$padj),]
+  resdata <- merge(as.data.frame(res), as.data.frame(counts(dds,normalized=TRUE)),by="row.names",sort=FALSE)
+  resdata$Row.names <- gsub("gene-FFT48_","",resdata$Row.names)
+  annotation <- merge(resdata, gene_anno, by.x="Row.names", by.y="Locus.tag", all.x= T)
+  write.csv(annotation, paste0("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/",i,"_raw.csv"),row.names = FALSE)
+  annotation <- annotation[annotation$Gene.Type == "protein-coding" | annotation$Gene.Type == "pseudogene", ]
+  annotation <- annotation[order(annotation$padj),]
+  annotation <- subset(annotation,  pvalue < 0.05)
+  annotation_DEG <- subset(annotation, log2FoldChange > 1 | log2FoldChange < -1)
+  annotation_DEG <- annotation_DEG[order(annotation_DEG$log2FoldChange, decreasing = TRUE),]
+
+  # write.csv(annotation_DEG, paste0("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/",i,"_DEG.csv"),row.names = FALSE)
+  
+  deglist1 <- bind_rows(deglist1, data.frame(name = i, as.data.frame(annotation_DEG)))
+  
+    
+  # DEG volcano
+  # deg.data <- annotation
+  # deg.data$log10FDR <- -log10(deg.data$pvalue)
+  # deg.data$log10FDR <- ifelse(is.infinite(deg.data$log10FDR),
+  #                             max(deg.data$log10FDR[is.finite(deg.data$log10FDR)], na.rm = TRUE)+1,deg.data$log10FDR)
+    
+  # # add a new row named Group
+  # deg.data$Group = "normal"
+  # deg.data$Group[which( (deg.data$pvalue < 0.05) & (deg.data$log2FoldChange > 1) )] = "up"
+  # deg.data$Group[which( (deg.data$pvalue < 0.05) & (deg.data$log2FoldChange < -1) )] = "down"
+  # # View the number of up-regulated and down-regulated genes
+  # table(deg.data$Group)
+  #   
+  # # add a new row named Label
+  # deg.data$Label = ""
+  # deg.data <- deg.data[order(deg.data$padj), ]
+  # up.genes <- head(deg.data$Symbol[which(deg.data$Group == "up")], 10)
+  # up.genes <- up.genes[nzchar(up.genes)]
+  # down.genes <- head(deg.data$Symbol[which(deg.data$Group == "down")], 10)
+  # down.genes <- down.genes[nzchar(down.genes)]
+  # # Merge up.genes and down.genes and add them to Label
+  # deg.top10.genes <- c(as.character(up.genes), as.character(down.genes))
+  # deg.data$Label[match(deg.top10.genes, deg.data$Symbol)] <- deg.top10.genes
+  # # Adding the top ten significantly differentially expressed genes to the volcano plot
+  # ggscatter(deg.data, x = "log2FoldChange", y = "log10FDR",
+  #           color = "Group", 
+  #           palette = c("#00AFBB", "#999999", "#FC4E07"),
+  #           size = 1,
+  #           label = deg.data$Label, 
+  #           font.label = 8, 
+  #           repel = T) + 
+  #   theme_linedraw() +
+  #   xlab("log2(FC)") + ylab("-log10(adujsted_P)") + 
+  #   geom_hline(yintercept = -log10(0.05), linetype="dashed") +
+  #   geom_vline(xintercept = c(-1,1), linetype="dashed") +
+  #   theme(panel.grid.major = element_blank(), 
+  #       panel.grid.minor = element_blank())
+  # 
+  # ggsave(paste0("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/",i,"_vol.pdf"), width = 5, height = 3.8)
+  
+    
+  # GO
+  updeg = subset(annotation, log2FoldChange > 1)
+  degnum1 <- rbind(degnum1, data.frame(name = paste0(i,"_up"), num = nrow(updeg)))
+  GO <- enricher(updeg$Row.names,
+                TERM2GENE = gene2go[,c(2,1)],
+                TERM2NAME = go2term,
+                pvalueCutoff = 1)
+  # pdf(paste0("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/",i,"_GO_up.pdf"))
+  # dotplot(GO)
+  # dev.off()
+  name = paste0(i,"_GOup")
+  if (is.null(GO)){
+    next
+  }
+  else {
+    df <- data.frame(name = name, as.data.frame(GO@result))
+    df <- df[order(df$pvalue,decreasing = F),][c(1:10),]
+    GOlist1 <- rbind(GOlist1, df)
+  }
+  
+  
+  downdeg = subset(annotation, log2FoldChange < -1)
+  degnum1 <- rbind(degnum1, data.frame(name = paste0(i,"_down"), num = nrow(downdeg)))
+  GO <- enricher(downdeg$Row.names,
+                TERM2GENE = gene2go[,c(2,1)],
+                TERM2NAME = go2term,
+                pvalueCutoff = 1)
+  if (is.null(GO)){
+    next
+  }
+  # pdf(paste0("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/",i,"_GO_down.pdf"))
+  # dotplot(GO)
+  # dev.off()
+  else {
+    name = paste0(i,"_GOdown")
+    df <- data.frame(name = name, as.data.frame(GO@result))
+    df <- df[order(df$pvalue,decreasing = F),][c(1:10),]
+    GOlist1 <- rbind(GOlist1, df)
+  }
+}
+
+write.csv(GOlist1,"/Users/lubeifang/Desktop/Kleb_dap/mutant/golist0810.csv",row.names = F)
+write.csv(deglist1,"/Users/lubeifang/Desktop/Kleb_dap/mutant/deglist0810.csv",row.names = F)
+
+# deglist1 <- deglist1[,c(1:8)]
+# df_wide <- pivot_wider(deglist1[,c(1,2,4)], names_from = name, values_from = log2FoldChange,
+#                        values_fill = list(log2FoldChange= 0))
+# df_wide
+# cor(df_wide[,c(2:7)])
+```
+
+
+## Find regulon
+```{r}
+GOlist <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/golist0810.csv")
+deglist <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deglist0810.csv")
+num_df <- data.frame()
+regulon_df <- data.frame()
+
+for ( i in c("Mu00760_mid","Mu00760_stat","Mu12175_mid","Mu12175_stat","Mu15210_mid","Mu15210_stat","Mu21375_mid","Mu21375_stat")){
+  print(i)
+  name <- strsplit(i,"_")[[1]][1]
+  name <- gsub("Mu","RS",name)
+  deg <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/",i,"_DEG.csv"))
+  deg <- deg[deg$Gene.Type == "protein-coding" | deg$Gene.Type == "pseudogene",][,c(1:3,6,7,15,17,18)]
+  peak1 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/",name,".csv"))
+  peak2 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak_plasmid/",name,".csv"))
+  colnames(peak2) <- colnames(peak1)
+  peak <- rbind(peak1,peak2)[,c(1:9,22,27)]
+  
+  temp_df <- data.frame(mu = i,
+                        deg_num = nrow(deg),
+                        peak_num = nrow(peak),
+                        regulon_num = length(unique(merge(deg,peak,by.x="Row.names",by.y="feature"))$Row.names),
+                        regulon_pro_num = length(unique(merge(deg,peak[peak$insideFeature == "overlapStart" | peak$insideFeature == "upstream", ],by.x="Row.names",by.y="feature")$Row.names)),
+                        regulate_no_bind = length(setdiff(deg$Row.names,peak$feature)),
+                        bind_no_regulate = length(setdiff(peak$feature,deg$Row.names)))
+  num_df <- rbind(num_df,temp_df)
+  
+  temp_df <- data.frame(mu = i, data.frame(merge(deg,peak,by.x="Row.names",by.y="feature")))
+  regulon_df <- rbind(regulon_df,temp_df)
+}
+
+# write.csv(regulon_df,"/Users/lubeifang/Desktop/Kleb_dap/files/regulon_df_4mutants.csv")
+
+```
+
+
+```{r}
+convert_to_decimal <- function(fraction) {
+  parts <- strsplit(fraction, "/")[[1]]
+  numerator <- as.numeric(parts[1])
+  denominator <- as.numeric(parts[2])
+  return (numerator / denominator)
+}
+library(ggVennDiagram)
+```
+
+
+## Analysis regulon gene
+### RS00760
+```{r}
+# RS00760 mutant deg analysis
+deg1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu00760_mid_DEG.csv")
+deg2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu00760_stat_DEG.csv")
+deg <- bind_rows(deg1,deg2)
+length(unique(deg$Row.names))
+same_deg <- merge(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",][,c(1,3)],deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",][,c(1,3,17,18)],by="Row.names")
+count <- data.frame(cate = c("1same", "2up_down", "3down_up"),
+                    num = c(nrow(same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x < 0 & same_deg$log2FoldChange.y > 0,])))
+length(unique(c(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names, deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names)))
+
+peak1 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS00760.csv"))
+peak2 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak_plasmid/RS00760.csv"))
+colnames(peak2) <- colnames(peak1)
+peak <- rbind(peak1,peak2)[,c(1:9,22,27)]
+
+regulon_num = length(unique(merge(deg,peak,by.x="Row.names",by.y="feature")$Row.names))
+regulon_pro_num = length(unique(merge(deg,peak[peak$insideFeature == "overlapStart" | peak$insideFeature == "upstream", ],by.x="Row.names",by.y="feature")$Row.names))
+
+# PLOT venn
+ggVennDiagram(
+  x = list(
+    "Stationary" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "Mid-log" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names),
+  cex = 2.5,
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count"
+) + 
+  scale_fill_gradient(low="white",high = "#C6AEBA") +
+  theme(legend.position = "none") 
+ggsave("/Users/lubeifang/Desktop/RS00760_venn.pdf",width = 2,height=2)
+
+# PLOT bar
+ggplot(count,aes(x=cate,y=num,fill=cate)) +
+  geom_bar(stat="identity", width = 0.5) +
+  scale_fill_brewer(palette = "Greys") +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle=45,vjust = 1,hjust=1)) +
+  ylab("") +
+  xlab("") +
+  geom_text(aes(label = num), vjust = -0.5, size = 3)
+# ggsave("/Users/lubeifang/Desktop/RS00760_bar.pdf",width = 1.5,height=2)
+
+# Whether TF inside?
+tf_tf_list <- data.frame()
+temp<-merge(TF_pfam,deg,by.x="Gene",by.y="Row.names")
+temp <- temp[,c(1,3,21,20)]
+unique(temp$Gene)
+
+TF_RS04010 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS04010.csv")
+intersect(TF_RS04010$feature,deg$Row.names)
+df <- merge(TF_RS04010, deg, by.x = "feature", by.y= "Row.names")
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+TF_RS09805 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS09805.csv")
+intersect(TF_RS09805$feature,deg$Row.names)
+df <- merge(TF_RS09805, deg, by.x = "feature", by.y= "Row.names")
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+TF_RS22310 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS22310.csv")
+intersect(TF_RS22310$feature,deg$Row.names)
+TF_RS24320 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS24320.csv")
+intersect(TF_RS24320$feature,deg$Row.names)
+df <- merge(TF_RS24320, deg, by.x = "feature", by.y= "Row.names")
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+TF_RS24930<- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS24930.csv")
+intersect(TF_RS24930$feature,deg$Row.names)
+df <- merge(TF_RS24930, deg, by.x = "feature", by.y= "Row.names")
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+TF_RS25385<- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS25385.csv")
+intersect(TF_RS25385$feature,deg$Row.names)
+df <- merge(TF_RS25385, deg, by.x = "feature", by.y= "Row.names")
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+write.csv(tf_tf_list,"/Users/lubeifang/Desktop/RS00760_indirect.csv",quote=F)
+
+
+# Analyze the GO of different gene set
+go_list <- data.frame()
+expressions <- c(
+  "setdiff(deg1$Row.name, deg2$Row.name)",
+  "same_deg$Row.name",
+  "setdiff(deg2$Row.name, deg1$Row.name)",
+  # "same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]$Row.name",
+  "same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]$Row.name",
+  "same_deg[same_deg$log2FoldChange.x < 0 & same_deg$log2FoldChange.y > 0,]$Row.name"
+)
+
+for (expr in expressions) {
+  gene_list <- eval(parse(text = expr))
+  print(paste("Processing:", expr))
+  
+  GO <- enricher(gene_list,
+                 TERM2GENE = gene2go[, c(2,1)],
+                 TERM2NAME = go2term,
+                 pvalueCutoff = 0.05)
+  if (is.null(GO)){
+    next
+  }
+  df <- data.frame(name = expr, as.data.frame(GO@result))
+  go_list <- rbind(go_list, df)
+}
+
+result_df <- go_list %>%
+  group_by(name) %>%
+  arrange(pvalue) %>%
+  slice_head(n = 3) %>%
+  ungroup()
+
+
+result_df$GeneRatio <- sapply(result_df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(result_df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#98B85D","#AC667E","#B395BD","#287c9e","#a9a9a9","#e29578"))
+
+ggsave("/Users/lubeifang/Desktop/RS00760_GO.pdf",width = 11,height=5)
+```
+### RS12175
+```{r}
+# RS12175 mutant deg analysis
+deg1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu12175_mid_DEG.csv")
+deg2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu12175_stat_DEG.csv")
+deg <- bind_rows(deg1,deg2)
+same_deg <- merge(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",][,c(1,3)],deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",][,c(1,3,17,18)],by="Row.names")
+count <- data.frame(cate = c("1same", "2up_down", "3down_up"),
+                    num = c(nrow(same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x < 0 & same_deg$log2FoldChange.y > 0,])))
+length(unique(c(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names, deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names)))
+
+# PLOT venn
+ggVennDiagram(
+  x = list(
+    "Stationary" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "Mid-log" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names),
+  cex = 2.5,
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count"
+) + 
+  scale_fill_gradient(low="white",high = "#C6AEBA") +
+  theme(legend.position = "none") 
+# ggsave("/Users/lubeifang/Desktop/RS12175_venn.pdf",width = 2,height=2)
+peak1 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS12175.csv"))
+peak2 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak_plasmid/RS12175.csv"))
+colnames(peak2) <- colnames(peak1)
+peak <- rbind(peak1,peak2)[,c(1:9,22,27)]
+
+regulon_num = length(unique(merge(deg,peak,by.x="Row.names",by.y="feature")$Row.names))
+regulon_pro_num = length(unique(merge(deg,peak[peak$insideFeature == "overlapStart" | peak$insideFeature == "upstream", ],by.x="Row.names",by.y="feature")$Row.names))
+# PLOT bar
+ggplot(count,aes(x=cate,y=num,fill=cate)) +
+  geom_bar(stat="identity", width = 0.5) +
+  scale_fill_brewer(palette = "Greys") +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle=45,vjust = 1,hjust=1)) +
+  ylab("") +
+  xlab("") +
+  geom_text(aes(label = num), vjust = -0.5, size = 3)
+# ggsave("/Users/lubeifang/Desktop/RS12175_bar.pdf",width = 1.5,height=2)
+
+# Whether TF inside?
+tf_tf_list <- data.frame()
+temp<-merge(TF_pfam,deg,by.x="Gene",by.y="Row.names")
+temp <- temp[,c(1,3,21,20)]
+unique(temp$Gene)
+
+
+
+# Analyze the GO of different gene set
+go_list <- data.frame()
+expressions <- c(
+  "setdiff(deg1$Row.name, deg2$Row.name)",
+  "same_deg$Row.name",
+  "setdiff(deg2$Row.name, deg1$Row.name)",
+  # "same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]$Row.name",
+  "same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]$Row.name",
+  "same_deg[same_deg$log2FoldChange.x < 0 & same_deg$log2FoldChange.y > 0,]$Row.name"
+)
+
+for (expr in expressions) {
+  gene_list <- eval(parse(text = expr))
+  print(paste("Processing:", expr))
+
+  GO <- enricher(gene_list,
+                 TERM2GENE = gene2go[, c(2,1)],
+                 TERM2NAME = go2term,
+                 pvalueCutoff = 0.05)
+  if (is.null(GO)){
+    next
+  }
+  df <- data.frame(name = expr, as.data.frame(GO@result))
+  go_list <- rbind(go_list, df)
+}
+
+result_df <- go_list %>%
+  group_by(name) %>%
+  arrange(pvalue) %>%
+  slice_head(n = 3) %>%
+  ungroup()
+
+
+result_df$GeneRatio <- sapply(result_df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(result_df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#98B85D","#AC667E","#B395BD","#287c9e","#a9a9a9","#e29578"))
+
+ggsave("/Users/lubeifang/Desktop/RS12175_GO.pdf",width = 11,height=5)
+```
+
+
+### RS15210
+```{r}
+# RS15210 mutant deg analysis
+deg1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu15210_mid_DEG.csv")
+deg2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu15210_stat_DEG.csv")
+deg <- bind_rows(deg1,deg2)
+same_deg <- merge(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",][,c(1,3)],deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",][,c(1,3,17,18)],by="Row.names")
+length(unique(c(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names, deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names)))
+
+count <- data.frame(cate = c("1same", "2up_down", "3down_up"),
+                    num = c(nrow(same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x < 0 & same_deg$log2FoldChange.y > 0,])))
+length(unique(c(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names, deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names)))
+
+# PLOT venn
+ggVennDiagram(
+  x = list(
+    "Stationary" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "Mid-log" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names),
+  cex = 2.5,
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count"
+) + 
+  scale_fill_gradient(low="white",high = "#C6AEBA") +
+  theme(legend.position = "none") 
+# ggsave("/Users/lubeifang/Desktop/RS15210_venn.pdf",width = 2,height=2)
+
+peak1 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS15210.csv"))
+peak2 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak_plasmid/RS15210.csv"))
+colnames(peak2) <- colnames(peak1)
+peak <- rbind(peak1,peak2)[,c(1:9,22,27)]
+
+regulon_num = length(unique(merge(deg,peak,by.x="Row.names",by.y="feature")$Row.names))
+regulon_pro_num = length(unique(merge(deg,peak[peak$insideFeature == "overlapStart" | peak$insideFeature == "upstream", ],by.x="Row.names",by.y="feature")$Row.names))
+
+# PLOT bar
+ggplot(count,aes(x=cate,y=num,fill=cate)) +
+  geom_bar(stat="identity", width = 0.5) +
+  scale_fill_brewer(palette = "Greys") +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle=45,vjust = 1,hjust=1)) +
+  ylab("") +
+  xlab("") +
+  geom_text(aes(label = num), vjust = -0.5, size = 3)
+# ggsave("/Users/lubeifang/Desktop/RS15210_bar.pdf",width = 1.5,height=2)
+
+# Whether TF inside?
+temp<-merge(TF_pfam,deg,by.x="Gene",by.y="Row.names")
+temp <- temp[,c(1,3,21,20)]
+length(unique(temp$Gene))
+temp<-merge(temp,regulon_df[grepl("Mu15210", regulon_df$mu),][,c(1,2)],by.x="Gene",by.y="Row.names")
+length(unique(temp$Gene))
+unique(temp$Gene)
+
+tf_tf_list <- data.frame()
+TF_RS10135 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS10135.csv")
+df <- merge(TF_RS10135, deg, by.x = "feature", by.y= "Row.names") 
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+TF_RS24320 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS24320.csv")
+df <- merge(TF_RS24320, deg, by.x = "feature", by.y= "Row.names") 
+df <- df[,c(1,2,9,22,30)]
+tf_tf_list <- rbind(tf_tf_list, df)
+write.csv(tf_tf_list,"/Users/lubeifang/Desktop/RS15210_indirect.csv",quote=F)
+
+
+
+# Analyze the GO of different gene set
+go_list <- data.frame()
+for (expr in expressions) {
+  gene_list <- eval(parse(text = expr))
+  print(paste("Processing:", expr))
+
+  GO <- enricher(gene_list,
+                 TERM2GENE = gene2go[, c(2,1)],
+                 TERM2NAME = go2term,
+                 pvalueCutoff = 0.05)
+  if (is.null(GO)){
+    next
+  }
+  df <- data.frame(name = expr, as.data.frame(GO@result))
+  go_list <- rbind(go_list, df)
+}
+
+result_df <- go_list %>%
+  group_by(name) %>%
+  arrange(pvalue) %>%
+  slice_head(n = 3) %>%
+  ungroup()
+
+
+result_df$GeneRatio <- sapply(result_df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(result_df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#98B85D","#AC667E","#B395BD","#287c9e","#a9a9a9","#e29578")) +
+  xlim(-1,9)+
+  ylim(-10,0)
+
+ggsave("/Users/lubeifang/Desktop/RS15210_GO.pdf",width = 11,height=5)
+```
+
+### RS21375
+```{r}
+# RS21375 mutant deg analysis
+deg1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu21375_mid_DEG.csv")
+deg2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu21375_stat_DEG.csv")
+deg <- bind_rows(deg1,deg2)
+same_deg <- merge(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",][,c(1,3)],deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",][,c(1,3,17,18)],by="Row.names")
+length(unique(c(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names, deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names)))
+
+count <- data.frame(cate = c("1same", "2up_down", "3down_up"),
+                    num = c(nrow(same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]),
+                            nrow(same_deg[same_deg$log2FoldChange.x < 0 & same_deg$log2FoldChange.y > 0,])))
+length(unique(c(deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names, deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names)))
+
+# PLOT venn
+ggVennDiagram(
+  x = list(
+    "Stationary" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "Mid-log" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names),
+  cex = 2.5,
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count"
+) + 
+  scale_fill_gradient(low="white",high = "#C6AEBA") +
+  theme(legend.position = "none") 
+# ggsave("/Users/lubeifang/Desktop/RS21375_venn.pdf",width = 2,height=2)
+
+# PLOT bar
+ggplot(count,aes(x=cate,y=num,fill=cate)) +
+  geom_bar(stat="identity", width = 0.5) +
+  scale_fill_brewer(palette = "Greys") +
+  theme_classic() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.text.x = element_text(angle=45,vjust = 1,hjust=1)) +
+  ylab("") +
+  xlab("") +
+  geom_text(aes(label = num), vjust = -0.5, size = 3)
+# ggsave("/Users/lubeifang/Desktop/RS21375_bar.pdf",width = 1.5,height=2)
+
+peak1 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS21375.csv"))
+peak2 <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak_plasmid/RS21375.csv"))
+colnames(peak2) <- colnames(peak1)
+peak <- rbind(peak1,peak2)[,c(1:9,22,27)]
+
+regulon_num = length(unique(merge(deg,peak,by.x="Row.names",by.y="feature")$Row.names))
+regulon_pro_num = length(unique(merge(deg,peak[peak$insideFeature == "overlapStart" | peak$insideFeature == "upstream", ],by.x="Row.names",by.y="feature")$Row.names))
+
+# Whether TF inside?
+temp<-merge(TF_pfam,deg,by.x="Gene",by.y="Row.names")
+temp <- temp[,c(1,3,21,20)]
+length(unique(temp$Gene))
+temp<-merge(temp,regulon_df[grepl("Mu21375", regulon_df$mu),][,c(1,2)],by.x="Gene",by.y="Row.names")
+length(unique(temp$Gene))
+
+
+
+# Analyze the GO of different gene set
+go_list <- data.frame()
+expressions <- c(
+  "setdiff(deg1$Row.name, deg2$Row.name)",
+  "same_deg$Row.name",
+  "setdiff(deg2$Row.name, deg1$Row.name)",
+  "same_deg[same_deg$log2FoldChange.x * same_deg$log2FoldChange.y > 0,]$Row.name",
+  "same_deg[same_deg$log2FoldChange.x > 0 & same_deg$log2FoldChange.y < 0,]$Row.name",
+  "same_deg[same_deg$log2FoldChange.x <0 & same_deg$log2FoldChange.y > 0,]$Row.name"
+)
+
+for (expr in expressions) {
+  gene_list <- eval(parse(text = expr))
+  print(paste("Processing:", expr))
+
+  GO <- enricher(gene_list,
+                 TERM2GENE = gene2go[, c(2,1)],
+                 TERM2NAME = go2term,
+                 pvalueCutoff = 0.05)
+  if (is.null(GO)){
+    next
+  }
+  df <- data.frame(name = expr, as.data.frame(GO@result))
+  go_list <- rbind(go_list, df)
+}
+
+result_df <- go_list %>%
+  group_by(name) %>%
+  arrange(pvalue) %>%
+  slice_head(n = 3) %>%
+  ungroup()
+
+
+result_df$GeneRatio <- sapply(result_df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(result_df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#98B85D","#B395BD","#287c9e","#a9a9a9","#e29578")) +
+  xlim(0,3)+
+  ylim(-4,-1)
+
+ggsave("/Users/lubeifang/Desktop/RS21375_GO.pdf",width = 11,height=5)
+```
+
+### exclude ribo in regulon_df
+```{r}
+unique(gene_anno$Gene.Type)
+new <- gene_anno[gene_anno$Gene.Type != "protein-coding" & gene_anno$Gene.Type != "pseudogene",]
+filtered_df <- regulon_df[!(regulon_df$Row.names %in% new), ]
+
+length(unique(filtered_df[grepl("Mu21",filtered_df$mu),][filtered_df$insideFeature == "upstream" | filtered_df$insideFeature == "overlapStart",]$Row.names))
+```
+
+# Mice experiment plot
+```{r}
+# Survival R9 and WT
+a=c(0,8,16,24,32,40,48,56)
+b=c(3,3,3,2,2,2,1,1)
+c=c(3,3,3,3,2,2,0,0)
+
+b = b/3
+c = c/3
+# Make a basic graph
+
+pdf("/Users/lubeifang/Desktop/R9_survival.pdf", width = 6,height = 5)
+plot( b~a , type="b" , bty="l" , xlab="Hours" , ylab="%Survival" , col=rgb(0.2,0.4,0.1,0.7) , lwd=3 , pch=17 , ylim=c(0,1) )
+lines(c ~a , col=rgb(0.8,0.4,0.1,0.7) , lwd=3 , pch=19 , type="b" )
+ 
+# Add a legend
+legend("topright", 
+  legend = c("MU_RS21375 (n=3)", "WT(n=3)"), 
+  col = c(rgb(0.2,0.4,0.1,0.7), 
+  rgb(0.8,0.4,0.1,0.7)), 
+  pch = c(17,19), 
+  bty = "n", 
+  pt.cex = 2, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F , 
+  inset = c(0.1, 0.1))
+dev.off()
+
+
+# Survival 4MU and WT
+a=c(0,10,20,30,40,50,60)
+b=c(8,8,7,7,7,7,7) # WT
+c=c(8,8,7,7,7,7,6) # F3
+d=c(8,8,7,7,6,5,5) # G7
+e=c(8,8,8,7,7,7,7) # R9
+f=c(8,8,5,5,3,3,3) # A7
+
+
+b = b/8
+c = c/8
+d = d/8
+e = e/8
+f = f/8
+
+# Make a basic graph
+pdf("/Users/lubeifang/Desktop/survival.pdf", width = 6,height = 5)
+plot( b~a , type="b" , bty="l" , xlab="Hours" , ylab="%Survival" , col=rgb(0.2,0.4,0.1,0.7) , lwd=3 , pch=15 , ylim=c(0,1) )
+lines(c ~a , col=rgb(0.8,0.5,0.2,0.7) , lwd=3 , pch=16 , type="b" )
+lines(d ~a , col=rgb(0.8,0.6,0.3,0.7) , lwd=3 , pch=17 , type="b" )
+lines(e ~a , col=rgb(0.8,0.7,0.4,0.7) , lwd=3 , pch=18 , type="b" )
+lines(f ~a , col=rgb(0.8,0.8,0.5,0.7) , lwd=3 , pch=19 , type="b" )
+ 
+# Add a legend
+legend("topright", 
+  legend = c("WT(n=8)", "MU_F3(n=8)", "MU_G7(n=8)", "MU_R9(n=8)", "MU_A7(n=8)"), 
+  col = c(rgb(0.2,0.4,0.1,0.7), rgb(0.8,0.5,0.2,0.7), rgb(0.8,0.6,0.3,0.7), rgb(0.8,0.7,0.4,0.7), rgb(0.8,0.8,0.5,0.7)), 
+  pch = c(15,16,17,18,19), 
+  bty = "n", 
+  pt.cex = 2, 
+  cex = 1.2, 
+  text.col = "black", 
+  horiz = F , 
+  inset = c(0.5, 0.5))
+dev.off()
+
+```
+
+# String test
+```{r}
+
+data <- data.frame(
+  name=c("aWT","MU-RS12175","MU-RS15210","MU-RS21375"),
+  value=c(1.8, 2.3, 2.4, 4.6)
+  # sd=c(1,0.2,3,2,4)
+)
+ 
+# Most basic error bar
+ggplot(data) +
+    geom_bar( aes(x=name, y=value), stat="identity", fill="skyblue", alpha=0.7) 
+    # geom_errorbar( aes(x=name, ymin=value-sd, ymax=value+sd), width=0.4, colour="orange", alpha=0.9, size=1.3)
+
+```
+
+# two times mutant rna-seq
+```{r}
+count1 = read.csv('/Users/lubeifang/Desktop/Kleb_dap/files/mu_counts0606.txt', header = T, 
+                 sep = '\t', skip = 1)
+count2 = read.csv('/Users/lubeifang/Desktop/Kleb_dap/files/mu_counts0810.txt', header = T, 
+                 sep = '\t', skip = 1)
+M<-cor(cbind(count1[,c(7:22)],count2[,c(7:36)]),method = "pearson")
+pdf("/Users/lubeifang/Desktop/a.pdf", width = 10, height = 10)
+corrplot(M,  method = 'color')
+dev.off()
+
+```
+
+```{r}
+deg1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu12175_mid_DEG.csv")
+deg2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu12175_stat_DEG.csv")
+deg3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu15210_mid_DEG.csv")
+deg4 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu15210_stat_DEG.csv")
+deg5 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu21375_mid_DEG.csv")
+deg6 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg/Mu21375_stat_DEG.csv")
+
+deg7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg06/Mu12175_mid_DEG.csv")
+deg8 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg06/Mu12175_stat_DEG.csv")
+deg9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg06/Mu15210_mid_DEG.csv")
+deg10 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg06/Mu15210_stat_DEG.csv")
+deg11 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg06/Mu21375_mid_DEG.csv")
+deg12 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/mutant/deg06/Mu21375_stat_DEG.csv")
+
+ggVennDiagram(
+  x = list(
+    "1" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names,
+    "2" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "3" = deg3[deg3$Gene.Type == "protein-coding"| deg3$Gene.Type == "pseudogene",]$Row.names,
+    "4" = deg4[deg4$Gene.Type == "protein-coding"| deg4$Gene.Type == "pseudogene",]$Row.names,
+    "5" = deg5[deg5$Gene.Type == "protein-coding"| deg5$Gene.Type == "pseudogene",]$Row.names,
+    "6" = deg6[deg6$Gene.Type == "protein-coding"| deg6$Gene.Type == "pseudogene",]$Row.names),
+  cex = 2.5,
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count"
+) + 
+  scale_fill_gradient(low="white",high = "#C6AEBA") +
+  theme(legend.position = "none") 
+
+ggVennDiagram(
+  x = list(
+    "1" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names,
+    "2" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "3" = deg3[deg3$Gene.Type == "protein-coding"| deg3$Gene.Type == "pseudogene",]$Row.names,
+    "4" = deg4[deg4$Gene.Type == "protein-coding"| deg4$Gene.Type == "pseudogene",]$Row.names,
+    "5" = deg5[deg5$Gene.Type == "protein-coding"| deg5$Gene.Type == "pseudogene",]$Row.names,
+    "6" = deg6[deg6$Gene.Type == "protein-coding"| deg6$Gene.Type == "pseudogene",]$Row.names),
+  cex = 2.5,
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count",force_upset = T
+)
+  
+
+ggVennDiagram(
+  x = list(
+    "mid2" = deg1[deg1$Gene.Type == "protein-coding"| deg1$Gene.Type == "pseudogene",]$Row.names,
+    "mid1" = deg7[deg7$Gene.Type == "protein-coding"| deg7$Gene.Type == "pseudogene",]$Row.names,
+    "stat2" = deg2[deg2$Gene.Type == "protein-coding"| deg2$Gene.Type == "pseudogene",]$Row.names,
+    "stat1" = deg8[deg8$Gene.Type == "protein-coding"| deg8$Gene.Type == "pseudogene",]$Row.names),
+  cat.cex = 2.5,
+  label_alpha = 0, edge_size = 0.3, label = "count"
+) + 
+  scale_fill_gradient(low="white",high = "#C6AEBA") +
+  theme(legend.position = "none") 
+```

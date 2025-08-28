@@ -1,0 +1,987 @@
+# Timepoint RNA-seq
+## load count and TPM
+```{R}
+rm(list=ls())
+library(edgeR)
+library(reshape2) 
+library(ggplot2)
+library(dplyr)
+
+TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+count = read.csv('/Users/lubeifang/Desktop/Kleb_dap/files/counts2.txt', header = T, 
+                 sep = '\t', skip = 1)
+
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno.tsv", sep = "\t")
+gene_anno$length <- gene_anno$End - gene_anno$Begin + 1
+
+
+
+# Calculate the mean count
+count$TP2 <- rowMeans(count[, c("kp1.1_L7.sorted.bam", "kp1.2_L7.sorted.bam")])
+count$TP4 <- rowMeans(count[, c("kp2.1_L7.sorted.bam", "kp2.2_L7.sorted.bam")])
+count$TP9 <- rowMeans(count[, c("kp3.1_L7.sorted.bam", "kp3.2_L7.sorted.bam")])
+count$TP24 <- rowMeans(count[, c("kp4.1_L7.sorted.bam", "kp4.2_L7.sorted.bam")])
+rownames(count) <- count[,c(1)]
+count_allgene = count[,c(1,15:18)]
+
+
+# Calculate cpm
+# cpm_allgene <- cpm(count_allgene)
+# cpm_allgene[cpm_allgene == 0] <- 0.00000001
+# heatmap(cpm_allgene, Rowv=NA, Colv=NA, col = heat.colors(256), scale="column", margins=c(5,5))
+# ootpm <- as.data.frame(cpm_allgene)
+# ootpm$Gene <- rownames(ootpm)
+# write.csv(ootpm,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/cpm_genes.csv",row.names = F)
+
+# Calculate tpm
+Length <- gene_anno[,c(13,14)]
+mergecount <- merge(count_allgene, Length, by.x = 'Geneid', by.y = 'Locus.tag')
+mergecount <- subset(mergecount,mergecount$length >= 0)
+
+FPKMlength <- mergecount[,c(1, ncol(mergecount))]
+FPKMcount <- mergecount[, -c(1, ncol(mergecount))]
+rownames(FPKMcount) <- FPKMlength$Geneid
+
+
+kb <- FPKMlength$length / 1000
+rpk <- FPKMcount / kb
+tpm <- t(t(rpk)/colSums(rpk) * 1000000)
+
+ootpm <- as.data.frame(tpm)
+ootpm <- ootpm+1
+# write.csv(ootpm, file="/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
+
+
+
+
+# change into dataframe
+ootpm$Gene <- rownames(ootpm)
+data <- melt(ootpm, id.vars = "Gene")
+
+ggplot(data, aes(x=variable, y=Gene, fill=log10(value))) + 
+  geom_tile() +
+  theme_bw() +
+  scale_fill_distiller(palette = "RdPu", trans = "reverse") +
+  labs(x="Time Point", y="TF", title="Heatmap of TPM") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+#ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/heatmap_allgene.pdf",width = 4, height = 40)
+```
+
+## heatmap of genes TPM and clusters
+#### F5a
+```{R}
+library(pheatmap)
+
+rows_to_keep <-  apply(ootpm[,c(1:4)], 1, function(row) length(unique(row)) > 1)
+tpm <- ootpm[rows_to_keep, ][,c(1:4)]
+
+pheatmap_result <- pheatmap(tpm,
+         scale = "row",
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "euclidean",
+         clustering_method = "complete",
+         show_rownames = F,
+         show_colnames = TRUE,
+         fontsize_row = 8,
+         height = 15,
+         width=5,
+         legend = T,
+         # annotation_col = annotation_col[,1],
+         filename = "/Users/lubeifang/Desktop/test.pdf")
+# cluster into 7 clusters
+row_clusters <- cutree(pheatmap_result$tree_row, k = 6)
+table(row_clusters)
+# add annotation
+annotation_row <- data.frame(Cluster = factor(row_clusters))
+rownames(annotation_row) <- rownames(tpm)
+pheatmap(tpm, 
+         scale = "row", 
+         clustering_distance_rows = "correlation", 
+         clustering_distance_cols = "euclidean", 
+         clustering_method = "complete", 
+         show_rownames = F, 
+         show_colnames = TRUE, 
+         fontsize_row = 8,
+         height = 15,
+         width = 3.5,
+         legend = TRUE,
+         annotation_row = annotation_row,
+         filename = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/heatmap_genes.pdf")
+```
+
+
+### number of GO and genes in clusters
+#### SF7c
+```{R}
+## GO annotation
+library(clusterProfiler)
+install.packages('/Users/lubeifang/Desktop/Kleb_dap/ref//org.Ckp.eg.db',repos = NULL, type="source")
+gene2go <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/gene2go.csv")
+go2term <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/go2term.csv")
+gene_cluster <- annotation_row
+gene_cluster$gene <- row.names(gene_cluster)
+
+GOlist <- data.frame()
+GOlist_all <- data.frame()
+for (i in c(1:6)){
+  print(i)
+  GO <- enricher(gene_cluster[gene_cluster$Cluster==i,][,c(2)],
+                 TERM2GENE = gene2go[,c(2,1)],
+                 TERM2NAME = go2term,
+                 pvalueCutoff = 1)
+  dotplot(GO)
+  name = paste0("Cluster ",i)
+  df <- data.frame(name = name, as.data.frame(GO))
+  GOlist_all <- rbind(GOlist_all, df)
+  df <- df[order(df$pvalue,decreasing = F),][c(1:6),]
+  GOlist <- rbind(GOlist, df)
+}
+
+convert_to_decimal <- function(fraction) {
+  parts <- strsplit(fraction, "/")[[1]]
+  numerator <- as.numeric(parts[1])
+  denominator <- as.numeric(parts[2])
+  return (numerator / denominator)
+}
+
+GOlist$GeneRatio <- sapply(GOlist$GeneRatio , convert_to_decimal)
+ggplot(GOlist, aes(x = GeneRatio, y = Description, size = Count, fill = pvalue)) +
+  geom_point(shape = 21) +
+  scale_fill_gradient(low = "purple", high = "yellow") +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  ) +
+  xlab("") +
+  ylab("") +
+  facet_wrap(~name, scales = "free_y", nrow = 3) +
+  theme(strip.background = element_rect(colour="black", fill="#C6AEBA"))
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Timepoint/6clusterDEG.pdf", width = 15, height = 12)
+
+a <- as.data.frame(table(GOlist_all$name))
+b <- as.data.frame(table(gene_cluster$Cluster))
+temp <- data.frame(cluster=rep(a$Var1,2),Var1=c(rep("number_GO",6),rep("number_gene",6)),Freq=c(a$Freq,b$Freq))
+  
+ggplot(temp, aes(x=cluster, y=Freq, group=Var1, color=Var1)) +
+  geom_bar(stat="identity", position=position_dodge(width = 0.9), fill=NA, width=0.8) +
+  scale_color_manual(values = c("#9BBFCF","#98B85D")) +
+  xlab("") +
+  coord_flip() +
+  theme_classic() +
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        legend.position = "right")+
+  # scale_x_discrete(limits = rev(c("6", "2", "1", "5", "4", "3"))) + 
+  # geom_text(aes(label = Var1, y = 0), position = position_dodge(width = 0.9), hjust = 1.1,color = "black") + 
+  geom_text(aes(label = Freq), position = position_dodge(width = 0.9), hjust = -0.2,color = "black") +
+  ylab("")
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/bar_genecluster.pdf", width = 6, height = 3)
+
+```
+
+
+### heatmap of TPM
+```{R}
+count_TF <- merge(ootpm,TF_pfam,by="Gene",all.y=T)
+rownames(count_TF) <- count_TF[,c(1)]
+count_TF = count_TF[,c(1:5)]
+
+# change into dataframe
+data <- melt(count_TF, id.vars = "Gene")
+ggplot(data, aes(x=variable, y=Gene, fill=log10(value))) + 
+  geom_tile() +
+  theme_void() +
+  # scale_fill_distiller(palette = "RdPu", trans = "reverse") +
+  scale_fill_distiller(palette = "Spectral") +
+  labs(x="Time Point", y="TF", title="Heatmap of TPM")
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/heatmap_TF.pdf",width = 3, height = 10)
+```
+
+
+
+### analyze the change and unchange gene pattern
+```{R}
+# calculate mean exp TPM
+ootpm$mean <- rowMeans(ootpm[, c("TP2", "TP4", "TP9", "TP24")], na.rm = TRUE)
+summary(ootpm$mean)
+nrow(ootpm[ootpm$mean>=10000,])
+
+ggplot(ootpm, aes(x=log(mean,10))) +
+  geom_density(color="white", fill="pink", alpha=0.5) +
+  labs(x="lg(average TPM)",
+       y="Density") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())+
+  geom_vline(xintercept = log(175.16,10), color = "grey", linetype = "dashed", size = 0.6) +
+  geom_text(aes(x = -4, y = .31, label = paste("Mean = 174.16")), 
+            color = "black", vjust = -0.5, hjust = -0.5)  
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/TF_TPM_density.pdf",width = 3.3, height = 3)
+
+
+
+# Calculate the log 2 fold change
+change.df <- data.frame(Gene = ootpm$Gene, 
+                        c1 = log(ootpm$TP4/ootpm$TP2,2),
+                        c2 = log(ootpm$TP9/ootpm$TP4,2),
+                        c3 = log(ootpm$TP24/ootpm$TP9,2),
+                        c13 = log(ootpm$TP9/ootpm$TP2,2),
+                        c24 = log(ootpm$TP24/ootpm$TP4,2),
+                        c14 = log(ootpm$TP24/ootpm$TP2,2))
+
+# Get no change TF
+no.change.gene <- subset(change.df,c1 <= 2 & c1 >= -2 & c2 <= 2 & c2 >= -2 & c3 <= 2 & c3 >= -2)
+no.change.gene <- merge(ootpm,no.change.gene,by="Gene")
+
+data <- melt(no.change.gene[,c(1,2,3,4,5)], id.vars = "Gene")
+ggplot(data, aes(x = variable, y = value, group=Gene)) +
+  geom_line(color = "grey")+
+  geom_point(color="#98B85D", size=1) +
+  labs(x="Culture Time",
+       y="TF TPM") +
+  theme_light() +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/4293nochange_gene_line.pdf",width = 7, height = 4)
+
+# The rest
+yes.change.gene <- anti_join(change.df,no.change.gene,by = "Gene")
+yes.change.gene <- merge(ootpm,yes.change.gene,by="Gene")
+
+
+data <- melt(yes.change.gene[,c(1,2,3,4,5)], id.vars = "Gene")
+ggplot(data, aes(x = variable, y = value, group=Gene)) +
+  geom_line(color = "grey")+
+  geom_point(color="#AC667E", size=1) +
+  labs(x="Culture Time",
+       y="TF TPM") +
+  theme_light() +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/1459nochange_gene_line.pdf",width = 7, height = 4)
+```
+
+
+### sub-categorized the gene change type
+```{R}
+# define the change
+change.trend.df <- data.frame(Gene=yes.change.gene$Gene)
+# 2 means up, 1 means no change, 0 means dwon
+change.trend.df$cc1 <- ifelse(yes.change.gene$c1>=2, "2", ifelse(yes.change.gene$c1 <=-2, "0","1"))
+change.trend.df$cc2 <- ifelse(yes.change.gene$c2>=2, "2", ifelse(yes.change.gene$c2 <=-2, "0","1"))
+change.trend.df$cc3 <- ifelse(yes.change.gene$c3>=2, "2", ifelse(yes.change.gene$c3 <=-2, "0","1"))
+change.trend.df$cc <- paste(change.trend.df$cc1, change.trend.df$cc2, change.trend.df$cc3)
+
+type <- as.data.frame(table(change.trend.df$cc))
+# write.csv(change.trend.df,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/43TFchange.trend.csv",row.names = F)
+```
+
+## GSVA analysis
+### Load GO info and tpm
+```{R}
+library(GO.db)
+library(readr)
+library(tidyverse)
+library(clusterProfiler)
+library(GSVA)
+library(parallel)
+
+gene2go <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/gene2go.csv")
+go2term <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/go2term.csv")
+
+library(org.Ckp.eg.db)
+
+# get tpm files from timepoint.Rmd
+# tpm <- ootpm[,-c(6)]
+tpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
+colnames(tpm)[1] <- "Gene"
+
+rownames(tpm) <- NULL
+gene_exp = tpm %>% column_to_rownames(var = "Gene")
+
+# check the exsit of gene2go
+gene2name <- merge(gene2go,go2term,by.x="GOs", by.y="GO_id")
+gene2name  %>% head()
+# go = gene2name$goterms %>% unique()
+go = gene2name$GOs %>% unique()
+
+# use mclapply and make it a list
+go_gsva <- mclapply(go, function(i) {
+  gene2name %>%
+    filter(GOs == i) %>%
+    #filter(goterms == i) %>%
+    pull(var = "GID") %>%
+    unique()
+}, mc.cores = 4)
+go_gsva <- setNames(go_gsva, go)
+temp <- as.data.frame(summary(go_gsva))
+temp <- temp[temp$Var2 == "Length",]
+
+# Plot the GO cluster involved genes
+ggplot(temp, aes(x=as.numeric(Freq))) +
+  geom_histogram(binwidth = 5) +
+  labs(x="genes invovled",
+       y="Density") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  xlim(0,200)
+
+
+```
+
+
+### GSVA transfer
+```{R}
+# GSVA analysis
+gsva_exp <- gsva(as.matrix(log2(gene_exp+1)), 
+                 go_gsva, 
+                 kcdf="Gaussian" ,#"Gaussian" for logtpm,logRPKM,logTPM, "Poisson" for counts
+                # verbose=T,
+                 verbose=FALSE,
+                 parallel.sz = parallel::detectCores(),
+                 min.sz=10, max.sz=50)
+# dim(gsva_exp)
+# gsva_exp[1:10,1:4]
+# write.csv(gsva_exp,"/Users/lubeifang/Desktop/gsva_go_matrix.csv")
+
+# visualization
+library(pheatmap)
+pheatmap_result <- pheatmap(gsva_exp,
+         scale = "row",
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "euclidean",
+         clustering_method = "complete",
+         show_rownames = F,
+         show_colnames = TRUE,
+         fontsize_row = 8,
+         height = 15,
+         width=5,
+         legend = T,
+         # annotation_col = annotation_col[,1],
+         filename = "/Users/lubeifang/Desktop/test.pdf")
+# cluster into 7 clusters
+row_clusters <- cutree(pheatmap_result$tree_row, k = 5)
+table(row_clusters)
+# add annotation
+annotation_row <- data.frame(Cluster = factor(row_clusters))
+rownames(annotation_row) <- rownames(gsva_exp)
+pheatmap(gsva_exp, 
+         scale = "row", 
+         clustering_distance_rows = "correlation", 
+         clustering_distance_cols = "euclidean", 
+         clustering_method = "complete", 
+         show_rownames = F, 
+         show_colnames = TRUE, 
+         fontsize_row = 8,
+         height = 15,
+         width = 5,
+         legend = TRUE,
+         annotation_row = annotation_row,
+         filename = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/heatmap_with_clusters——tpm.pdf")
+
+
+```
+
+
+### GO numbers and gene numbers
+```{R}
+ # GO enrichment
+library(gridExtra)
+library(clusterProfiler)
+row_clusters <- as.data.frame(row_clusters)
+row_clusters$GOs <- rownames(row_clusters)
+row_clusters$GO_id <- rownames(row_clusters)
+
+enrichment_results <- list()
+# pie_list <- list()
+# table <- data.frame()
+for (i in 1:5) {
+  print(i)
+  a <- merge(row_clusters[row_clusters$row_clusters == i,], gene2name, by="GOs",all.x=T)
+  table(a$goterms)
+  b <- merge(row_clusters[row_clusters$row_clusters == i,], gene2go, by="GOs")
+  c <- as.data.frame(table(b$GOs))
+  # p <- ggplot(c, aes(x="", y=Freq, fill=Var1)) +
+  #   geom_bar(stat="identity", width=1) +
+  #   coord_polar("y", start=0) +
+  #   theme_void() +
+  #   geom_text(aes(label = paste0(Var1, " = ", Freq)), color = "white", size = 2) +
+  #   theme(legend.position = "none")
+  table <- rbind(table, 
+                 data.frame(cluster = i, type = "n_gene",  number = length(unique(a$GID))),
+                 data.frame(cluster = i, type = "n_term",  number = length(unique(a$goterms))))
+  # pie_list[[length(pie_list)+1]] <- p
+  # enrichment_results <- rbind(enrichment_results,
+  #                             data.frame(cluster = i,as.data.frame(table(b$))))
+}
+
+# g <- arrangeGrob(grobs = pie_list, nrow = 2) 
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/pies-tpm.pdf",g, width = 5, height = 3)
+
+# p1 <- ggplot(enrichment_results, aes(x=cluster, y=Freq, group=Var1, color=Var1)) +
+#   geom_bar(stat="identity", position=position_dodge(width = 0.9), fill=NA, width=0.8) +
+#   scale_color_manual(values = c("#A2A6BF","#9BBFCF","#98B85D")) +
+#   xlab("") +
+#   coord_flip() +
+#   theme_classic() +
+#   theme(axis.line.y = element_blank(),
+#         axis.ticks.y = element_blank(),
+#         legend.position = "none")+
+#   scale_x_discrete(limits = rev(c("6", "2", "1", "5", "4", "3"))) + 
+#   geom_text(aes(label = Var1, y = 0), position = position_dodge(width = 0.9), hjust = 1.1,color = "black") + 
+#   geom_text(aes(label = Freq), position = position_dodge(width = 0.9), hjust = -0.2,color = "black")
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/bar1.pdf", width = 6, height = 4)
+
+
+cluster <- merge(row_clusters, gene2name, by="GOs",all.x=T)
+
+p2 <- ggplot(table, aes(x=cluster, y=number, group=type, color=type)) +
+  geom_bar(stat="identity", position=position_dodge(width = 0.9), fill=NA, width = 0.8) +
+  scale_color_manual(values = c("#C1A0B3","#FCAB8F"))  +
+  xlab("") +
+  coord_flip() +
+  theme_classic() +
+  theme(axis.line.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        # axis.text.y = element_blank(),
+        legend.position = "none")+
+  # scale_x_discrete(limits = rev(c("2", "1", "5", "4", "3"))) + 
+  geom_text(aes(label = number), position = position_dodge(width = 0.9), hjust = -0.3,color = "black") +
+  geom_text(aes(label = type, y = 0), position = position_dodge(width = 0.9), hjust = 1.1,size=3,color = "black")
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/SF/SF8/numberofgeneGO.pdf", width = 6, height = 4)
+# p <- p1 + p2
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/bar.pdf", width = 9, height = 4)
+```
+
+
+
+## DEG analysis
+```{R}
+library(DESeq2)
+library(ggpubr)
+library(clusterProfiler)
+# annotations of the genes
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno0531.csv")
+# raw count
+count = read.csv('/Users/lubeifang/Desktop/Kleb_dap/files/counts2.txt', header = T, 
+                 sep = '\t', skip = 1)
+rownames(count)<-count[,1]
+count <- count[,-c(1:6)]
+
+convert_to_decimal <- function(fraction) {
+  parts <- strsplit(fraction, "/")[[1]]
+  numerator <- as.numeric(parts[1])
+  denominator <- as.numeric(parts[2])
+  return (numerator / denominator)
+}
+
+# compare t2 to t1
+deglist <- data.frame()
+degnum <- data.frame()
+GOlist <- data.frame()
+
+OE21 <- count[,c(1:4)]
+OE32 <- count[,c(3:6)]
+OE43 <- count[,c(5:8)]
+OE31 <- count[,c(1:2,5:6)]
+OE42 <- count[,c(3:4,7:8)]
+OE41 <- count[,c(1:2,7:8)]
+
+for ( i in c("OE21","OE32","OE43","OE31","OE42","OE41")){
+  print(i)
+  OE <- get(i)
+  condition <- factor(c(rep("control",2), rep("treat",2)))
+  coldata <- data.frame(row.names = colnames(OE), condition)
+  head(coldata)
+  
+  dds <- DESeqDataSetFromMatrix(countData=OE, colData=coldata,design=~condition)
+  dim(dds)
+  dds <- DESeq(dds)
+  vsdata <- vst(dds, blind=FALSE)
+  res <- results(dds,contrast = c('condition', 'treat', 'control'))
+  res <- res[order(res$padj),]
+  resdata <- merge(as.data.frame(res), as.data.frame(counts(dds,normalized=TRUE)),by="row.names",sort=FALSE)
+  
+  annotation <- merge(resdata, gene_anno, by.x="Row.names", by.y="Locus.tag", all.x= T)
+  annotation <- annotation[order(annotation$padj),]
+  annotation <- subset(annotation, padj < 0.05 & pvalue < 0.01)
+  annotation_DEG <- subset(annotation, log2FoldChange > 2 | log2FoldChange < -2)
+  annotation_DEG <- annotation_DEG[order(annotation_DEG$log2FoldChange, decreasing = TRUE),]
+
+  # write.csv(annotation_DEG,
+  #           paste0("/Users/lubeifang/Desktop/Kleb_dap/Timepoint/DEG/",i,"_DEG.csv"),row.names = FALSE)
+  
+    
+  # DEG volcano
+  deg.data <- annotation
+  deg.data$log10FDR <- -log10(deg.data$pvalue)
+  deg.data$log10FDR <- ifelse(is.infinite(deg.data$log10FDR),
+                              max(deg.data$log10FDR[is.finite(deg.data$log10FDR)], na.rm = TRUE)+1,deg.data$log10FDR)
+    
+  # add a new row named Group
+  deg.data$Group = "normal"
+  deg.data$Group[which( (deg.data$pvalue < 0.05) & (deg.data$log2FoldChange > 2) )] = "up"
+  deg.data$Group[which( (deg.data$pvalue < 0.05) & (deg.data$log2FoldChange < -2) )] = "down"
+  # View the number of up-regulated and down-regulated genes
+  table(deg.data$Group)
+    
+  # add a new row named Label
+  deg.data$Label = ""
+  deg.data <- deg.data[order(deg.data$padj), ]
+  up.genes <- head(deg.data$Symbol[which(deg.data$Group == "up")], 10)
+  up.genes <- up.genes[nzchar(up.genes)]
+  down.genes <- head(deg.data$Symbol[which(deg.data$Group == "down")], 10)
+  down.genes <- down.genes[nzchar(down.genes)]
+  # Merge up.genes and down.genes and add them to Label
+  deg.top10.genes <- c(as.character(up.genes), as.character(down.genes))
+  deg.data$Label[match(deg.top10.genes, deg.data$Symbol)] <- deg.top10.genes
+  deglist <- bind_rows(deglist, data.frame(name = i, as.data.frame(deg.data)))
+  # Adding the top ten significantly differentially expressed genes to the volcano plot
+  p <- ggscatter(deg.data, x = "log2FoldChange", y = "log10FDR",
+            color = "Group", 
+            palette = c("#00AFBB", "#999999", "#FC4E07"),
+            size = 2,
+            label = deg.data$Label, 
+            font.label = 8, 
+            repel = T) + 
+    theme_linedraw() +
+    xlab("log2(FC)") + ylab("-log10(adujsted_P)") + 
+    geom_hline(yintercept = -log10(0.05), linetype="dashed") +
+    geom_vline(xintercept = c(-2,2), linetype="dashed") +
+    theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())
+    
+  # # Output the picture
+  # pdf(paste0("/Users/lubeifang/Desktop/Kleb_dap/Timepoint/DEG/",i,"_vol.pdf"), bg="transparent")
+  # print(p)
+  # dev.off()
+  
+    
+  # GO
+  updeg = subset(annotation, log2FoldChange > 2)
+  degnum <- rbind(degnum, data.frame(name = paste0(i,"_up"), num = nrow(updeg)))
+  GO <- enricher(updeg$Row.names,
+                TERM2GENE = gene2go[,c(2,1)],
+                TERM2NAME = go2term,
+                pvalueCutoff = 0.05)
+  name = paste0(i,"_GOup")
+  df <- data.frame(name = name, as.data.frame(GO))
+  df <- df[order(df$pvalue,decreasing = F),][c(1:4),]
+  GOlist <- rbind(GOlist, df)
+
+  
+  downdeg = subset(annotation, log2FoldChange < -1)
+  degnum <- rbind(degnum, data.frame(name = paste0(i,"_down"), num = nrow(downdeg)))
+  GO <- enricher(downdeg$Row.names,
+                TERM2GENE = gene2go[,c(2,1)],
+                TERM2NAME = go2term,
+                pvalueCutoff = 0.05)
+  name = paste0(i,"_GOdown")
+  df <- data.frame(name = name, as.data.frame(GO))
+  df <- df[order(df$pvalue,decreasing = F),][c(1:4),]
+  GOlist <- rbind(GOlist, df)
+}
+
+# write.csv(deglist,"/Users/lubeifang/Desktop/Kleb_dap/files/deglist.csv",row.names = F)
+```
+
+#### deg plot
+```{R}
+# deglist draw plot
+library(gghalves)
+library(ggrepel)
+deglist <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/deglist.csv")
+deglist <- deglist[deglist$log2FoldChange > 2 | deglist$log2FoldChange < -2, ]
+deglist$trend <- ifelse(deglist$log2FoldChange > 2,
+                        paste0(deglist$name,"up"),paste0(deglist$name,"low"))
+deglist$Label <- ifelse(deglist$Label %in% TF_pfam$Gene, deglist$Label, 
+                        ifelse(grepl("RS", deglist$Label), "", deglist$Label))
+
+ggplot(deglist,aes(x=name,y=log2FoldChange,fill=name)) +
+  geom_point(position = position_jitter(width = 0.1), size = 0.2, color = "grey", alpha = 0.4) +
+  geom_half_violin(side='R', trim = F, color = NA) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  geom_text_repel(data = deglist, aes(label = Label), 
+                  position = position_jitter(width = 0.2),  size = 2 , max.overlaps = 1000) +
+  scale_fill_brewer(palette=4) +
+  ylim(-10,10)
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/deg_all2.pdf",width = 10,height = 7)
+
+
+new <- merge(deglist, gene_cluster, by.x="Row.names",by.y="gene")
+new <- new[,c(1,2,24)]
+result <- new %>%
+  group_by(Cluster, name) %>%
+  summarise(Count = n(), .groups = 'drop')
+
+ggplot(result,aes(x=Cluster,y=Count,fill=name)) +
+  geom_bar(stat = "identity", position = "stack",width = 0.8) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        legend.background = element_rect(color = "black", size = 0.5, linetype = "solid"),
+        ) +
+  scale_fill_brewer(palette=4) +
+  ylim(0,1300) +
+  coord_flip() +
+  geom_text(aes(label = Count), position = position_stack(vjust = 0.5), color = "white")
+  
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/degincluster.pdf",width = 4,height = 3)
+```
+
+
+
+#### GO plot
+```{R}
+deglist
+degnum
+
+
+GOlist$GeneRatio <- sapply(GOlist$GeneRatio , convert_to_decimal)
+ggplot(GOlist, aes(x = GeneRatio, y = Description, size = Count, fill = pvalue)) +
+  geom_point(shape = 21) +
+  scale_fill_gradient(low = "purple", high = "yellow") +
+  theme_light() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+  ) +
+  xlab("") +
+  ylab("") +
+  facet_wrap(~name, scales = "free_y", nrow = 2) +
+  theme(strip.background = element_rect(colour="black", fill="#C6AEBA"))
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Timepoint/DEG/GOchange.pdf", width = 15, height = 5)
+```
+
+
+
+
+
+## Select changed TF
+```{R}
+# conclude TF
+change.trend.TF <- merge(change.trend.df, TF_pfam, by="Gene")
+type <- as.data.frame(table(change.trend.TF$cc))
+# write.csv(change.trend.TF,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/43TFchange.trend.csv",row.names = F)
+
+# line plot of no change TF
+no.change.TF <- merge(no.change.gene,TF_pfam,by="Gene")
+data <- melt(no.change.TF[,c(1,2,3,4,5)], id.vars = "Gene")
+ggplot(data, aes(x = variable, y = value, group=Gene)) +
+  geom_line(color = "grey")+
+  geom_point(color="#98B85D", size=1) +
+  labs(x="Culture Time",
+       y="TF TPM") +
+  theme_light() +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/318nochange_TF_line.pdf",width = 7, height = 4)
+# line plot of change TF
+yes.change.TF <- merge(yes.change.gene, TF_pfam,by="Gene")
+data <- melt(yes.change.TF[,c(1,2,3,4,5)], id.vars = "Gene")
+ggplot(data, aes(x = variable, y = value, group=Gene)) +
+  geom_line(color = "grey")+
+  geom_point(color="#AC667E", size=1) +
+  labs(x="Culture Time",
+       y="TF TPM") +
+  theme_light() +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/52nochange_TF_line.pdf",width = 7, height = 4)
+# write.csv(yes.change.TF,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/56TFchange.trend.csv",row.names = F)
+```
+
+
+### Analyze the expression change at c13, c24, c14
+#### Detect the general trend
+```{R}
+# up
+allup.gene <- subset(change.df,c1 > 0 & c2 > 0 & c3 > 0)
+allup.TF <- merge(allup.gene, TF_pfam,by="Gene")
+
+c14.up.gene <- subset(allup.gene,c14 >= 2)
+c14.up.TF <- merge(c14.up.gene, TF_pfam,by="Gene")
+
+alldown.gene <- subset(change.df,c1 < 0 & c2 < 0 & c3 < 0)
+alldown.TF <- merge(alldown.gene, TF_pfam,by="Gene")
+
+c14.down.gene <- subset(alldown.gene,c14 <= -2)
+c14.down.TF <- merge(c14.down.gene, TF_pfam,by="Gene")
+
+
+# specific
+c13.up.gene <- subset(allup.gene,c13 >= 2)
+c13.up.TF <- merge(c13.up.gene, TF_pfam,by="Gene")
+
+c13.down.gene <- subset(alldown.gene,c13 <= -2)
+c13.down.TF <- merge(c13.down.gene, TF_pfam,by="Gene")
+
+c24.up.gene <- subset(allup.gene,c24 >= 2)
+c24.up.TF <- merge(c24.up.gene, TF_pfam,by="Gene")
+
+c24.down.gene <- subset(alldown.gene,c13 <= -2)
+c24.down.TF <- merge(c24.down.gene, TF_pfam,by="Gene")
+```
+
+
+
+#### TF change 3D plot
+```{R}
+rm(list=ls())
+
+library(ggplot2)
+library(dplyr)
+
+TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+tpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
+TF_tpm <- merge(tpm,TF_pfam,by.x="X",by.y="Gene")
+
+TF_tpm <- TF_tpm[,c(1:5,7,21)]
+change.df <- data.frame(Gene = TF_tpm$X, 
+                        c1 = log(TF_tpm$TP4/TF_tpm$TP2,2),
+                        c2 = log(TF_tpm$TP9/TF_tpm$TP4,2),
+                        c3 = log(TF_tpm$TP24/TF_tpm$TP9,2))
+change.df$label <- ifelse(change.df$c1 <= 2 & change.df$c1 >= -2 & change.df$c2 <= 2 & 
+                            change.df$c2 >= -2 & change.df$c3 <= 2 & change.df$c3 >= -2,
+                          "",change.df$Gene)
+change.df$label1 <- ifelse(change.df$c1 <= 2 & change.df$c1 >= -2 & change.df$c2 <= 2 & 
+                            change.df$c2 >= -2 & change.df$c3 <= 2 & change.df$c3 >= -2,
+                          "no","sig")
+change.df$score <- (change.df$c1)^2+(change.df$c2)^2+(change.df$c3)^2
+change.df$label2 <- ifelse(change.df$score >= 20,change.df$Gene,"")
+table(change.df$label1)
+
+library(scatterplot3d)
+source('http://www.sthda.com/sthda/RDoc/functions/addgrids3d.r')
+
+pdf(file = "/Users/lubeifang/Desktop/fig.pdf")
+colors <- c("#98B85D","#dd3497")
+colors <- colors[as.numeric(as.factor(change.df$label1))]
+s3d <- scatterplot3d(change.df[,c(2:4)], pch = 16, 
+                     color = colors, 
+                     xlab = "Change 2h to 4h", 
+                     ylab = "Change 4h to 9h", 
+                     zlab = "Change 9h to 24h",
+                     legend = levels(change.df$label1),
+                     # angle = 165,
+                     grid=FALSE, box=F)
+addgrids3d(change.df[,c(2:4)], grid = c("xy", "xz", "yz"))
+with(change.df, {
+  text(s3d$xyz.convert(c1, c2, c3), 
+       labels = label2, 
+       cex = 0.8, 
+       col = "black", 
+       pos = 4)
+  })
+dev.off()
+```
+
+
+
+## TF in cluster
+### bar plot
+```{R}
+annotation_row$Gene <- rownames(annotation_row)
+tfinC <- merge(TF_pfam,annotation_row,by="Gene")
+temp <- as.data.frame(table(tfinC$Cluster))
+
+ggplot(temp,aes(x=Var1,y=Freq,fill=Var1)) +
+  geom_bar(stat="identity") +
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  xlab("TF in Cluster") +
+  ylab("Counts") 
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/tfinC_counts.pdf",width=2.3,height = 3)
+```
+
+
+### Sankey plot
+```{R}
+library(ggsankey)
+change.trend.TF
+tfinC
+TF_type_cluster <- merge(tfinC,change.trend.df,by="Gene",all.x = T)
+TF_type_cluster$cc[is.na(TF_type_cluster$cc)] <- 0
+
+df <- make_long(TF_type_cluster, Cluster, cc)
+
+table(TF_type_cluster$cc)
+df <- mtcars %>%
+  make_long(cyl, vs, am, gear, carb)
+
+
+
+ggplot(df, aes(x = x, next_x = next_x, node = node, next_node = next_node, fill = factor(node), label = node)) +
+  geom_sankey(flow.alpha = .6,
+              node.color = "gray30") +
+  geom_sankey_label(size = 3, color = "white", fill = "gray40") +
+  scale_fill_viridis_d(drop = FALSE) +
+  theme_sankey(base_size = 18) +
+  labs(x = NULL) +
+  theme(legend.position = "none",
+        plot.title = element_text(hjust = .5)) +
+  ggtitle("CLuster with Type")
+  
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/sankey.pdf",width = 5,height = 5)
+
+```
+
+### TF expression itself in 4 TP
+```{R}
+library(gghalves)
+library(reshape2) 
+library(ggrepel)
+
+TF_tpm
+
+data <- melt(TF_tpm[,c(1:5)], id.vars = "X")
+data$Label <- ifelse(data$value >= 2000, data$X,"")
+
+ggplot(data, aes(x=variable, y=value, fill=variable)) + 
+  geom_point(position = position_jitter(width = 0.1), size = 0.2, color = "darkgrey", alpha = 0.8) +
+  geom_half_violin(side='R', trim = F, color = NA) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  geom_text_repel(data = data, aes(label = Label), 
+                  position = position_jitter(width = 0.2),  size = 2 , max.overlaps = 1000) +
+  scale_fill_brewer(palette=8) +
+  xlab("") +
+  ylab("TPM")
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/topTF_tpm.pdf",width = 5,height = 3.3)
+
+
+```
+
+
+
+## TF samples
+### RS14320
+```{R}
+library(ggVennDiagram)
+peak <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS24320.csv")
+peak_pro <- peak[peak$insideFeature == "upstream" | peak$insideFeature == "overlapstart", ]
+
+deglist <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/deglist.csv")
+deglist_OE43 <- deglist[deglist$name == "OE43",]
+deglist_OE21 <- deglist[deglist$name == "OE21",]
+deglist_OE32 <- deglist[deglist$name == "OE32",]
+
+x = list(RS24320 = as.character(unique(peak_pro$feature)),
+         DEG = as.character(unique(deglist_OE32$Row.names)))
+ 
+
+ggVennDiagram(x, label_alpha = 0, edge_size = 0.3) +
+    scale_fill_gradient(low="white",high = "#C6AEBA") +
+    theme(legend.position = "none")
+
+```
+
+```{R}
+rm(list=ls())
+library(ggplot2)
+library(ggrepel)
+library(hrbrthemes)
+
+result <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/rt-pcr.csv", header = F)
+
+cor.test(result$V3, 40-result$V4, method = c("spearman"))
+
+ggplot(result, aes(x=40-V4, y=V3,fill=V1)) +
+  geom_point() +
+  geom_smooth(method=lm , color="#8A8DBF", fill="#E7BCC6", se=TRUE) +
+  theme_light() +
+  annotate("text", x=20, y=200, label ="r = -0.726\np-value = 1.477e-07", size = 3) +
+  # geom_text_repel(aes(label=V1), vjust = -1, size = 3) +
+  xlab("∆Ct") +
+  ylab("TPM") +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none")
+  
+ggsave("cor_rtseq.pdf", path = "/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/", width = 3.5,height = 3)
+
+```
+
+
+### GO
+```{R}
+library(clusterProfiler)
+pdf("/Users/lubeifang/Desktop/TFsample_GOs.pdf")
+par(mfrow = c(2, 3))
+for (i in c("RS06165","RS18170","RS12930","RS00200","RS14320")){
+  print(i)
+  i = "RS06165"
+  peak <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/",i,".csv"))
+  GO <- enricher(peak$feature,
+                 TERM2GENE = gene2go[,c(2,1)],
+                 TERM2NAME = go2term,
+                 pvalueCutoff = 0.05)
+  dotplot(GO)
+}
+dev.off()
+```
+
+
+## Build org.db
+## Start from EggNog
+```{R}
+library(AnnotationForge)
+library(tidyverse)
+
+annotations <- read_delim("/Users/lubeifang/Desktop/Kleb_dap/ref/Kleb_eggNOG.tsv", 
+                                    delim = "\t", escape_double = FALSE, 
+                                    comment = "#", trim_ws = TRUE) %>% 
+  mutate(Gene_Name = if_else(Preferred_name != "-",
+                             Preferred_name,
+                             PFAMs)) %>% filter(Gene_Name != "-")
+
+gene_name <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/kleb_genename.csv")
+annotations <- merge(annotations, gene_name[,c(11,13)],by.x="query",by.y="Protein.accession")
+
+gene_info <- dplyr::select(annotations,GID = Locus.tag,Gene_Name) %>%
+  dplyr::filter(!is.na(Gene_Name))
+ 
+# gene with go
+gene2go <- dplyr::select(annotations,GID = Locus.tag,GOs) %>%
+  separate_rows(GOs, sep = ',', convert = F) %>%
+  filter(GOs!="-",!is.na(GOs)) %>% 
+  mutate(EVIDENCE = 'A') %>% 
+  unique()
+# write.csv(gene2go,"/Users/lubeifang/Desktop/Kleb_dap/ref/gene2go.csv",row.names = F)
+# write.csv(go2term,"/Users/lubeifang/Desktop/Kleb_dap/ref/go2term.csv",row.names = F)
+# gene with pathway
+gene2pathway <- dplyr::select(annotations, GID = Locus.tag,Pathway = KEGG_Pathway) %>%
+  separate_rows(Pathway, sep = ',', convert = F) %>%
+  filter(str_detect(Pathway, 'map')) %>% 
+  unique()%>%na.omit()
+
+AnnotationForge::makeOrgPackage(gene_info=gene_info,
+                                go=gene2go,
+                                maintainer='Lucile Lu<beifanglu2-c@my.cityu.edu.hk>',
+                                author='Lucile Lu',
+                                version="0.1" ,
+                                outputDir="/Users/lubeifang/Desktop/Kleb_dap/ref/", 
+                                tax_id="88888",
+                                genus="cr-hvkp4",
+                                species="kp")
+install.packages('/Users/lubeifang/Desktop/Kleb_dap/ref//org.Ckp.eg.db',repos = NULL, type="source")
+
+```
+
+
+# TPM relationship with TBM layers
+```{r}
+tpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
+ana
+
+ana_tpm <- merge(ana[,c(28,32)], tpm,by.x="shared.name",by.y = "X")
+
+```
+

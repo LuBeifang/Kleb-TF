@@ -1,0 +1,560 @@
+## Annotate the evo-dap
+```{r}
+rm(list=ls())
+library(ChIPseeker)
+library(ChIPpeakAnno)
+library(clusterProfiler)
+require(GenomicFeatures)
+library(GenomicRanges)
+library(readxl)
+library(ggplot2)
+library(devEMF)
+library(Biostrings)
+library(memes)
+library(stringr)
+library(dplyr)
+getwd()
+
+##### Kleb-DAPseq #####
+############Kleb hvkp4###############
+########come on PEAKS!!!###########
+# load annotation
+
+kp_gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno0531.csv")
+
+# HKU57
+HKU57_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
+HKU57_annoData <- toGRanges(HKU57_txdb, feature="gene")
+
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_geneanno.gff",sep="\t",header=F)
+HKU57_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+HKU57_gene_anno  <- HKU57_gene_anno[,c(1,9,10)]
+HKU57_gene_anno$V9 <- sub("ID=gene-", "", HKU57_gene_anno$V9)
+HKU57_gene_anno$Symbolinhvkp4 <- sub("Name=", "", HKU57_gene_anno$V10)
+HKU57_gene_anno1  <- HKU57_gene_anno
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_cds.txt",sep="\t",header=F)
+gene_anno$V2 <- str_extract(gene_anno$V2, "WP_[^_]+\\.1")
+gene_anno <- gene_anno[order(gene_anno$V9,decreasing = F),] %>%
+  distinct(V1, .keep_all = T)
+gene_anno <- merge(gene_anno,kp_gene_anno,by.x="V2",by.y="Protein.accession")
+HKU57_gene_anno <- gene_anno[,c(2,13,14,15)]
+colnames(HKU57_gene_anno) <- c("gene","productinhvkp4","Symbolinhvkp4","Locus.taginhvkp4")
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.fna"
+HKU57_stringset <- readDNAStringSet(fasta_file)
+
+MGH78578_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
+MGH78578_annoData <- toGRanges(MGH78578_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_geneanno.gff",sep="\t",header=F)
+MGH78578_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+MGH78578_gene_anno  <- MGH78578_gene_anno[,c(1,9,10)]
+MGH78578_gene_anno$V9 <- sub("ID=gene-", "", MGH78578_gene_anno$V9)
+MGH78578_gene_anno$Symbolinhvkp4 <- sub("Name=", "", MGH78578_gene_anno$V10)
+MGH78578_gene_anno1  <- MGH78578_gene_anno
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_cds.txt",sep="\t",header=F)
+gene_anno$V2 <- str_extract(gene_anno$V2, "WP_[^_]+\\.1")
+gene_anno <- gene_anno[order(gene_anno$V9,decreasing = F),] %>%
+  distinct(V1, .keep_all = T)
+gene_anno <- merge(gene_anno,kp_gene_anno,by.x="V2",by.y="Protein.accession")
+MGH78578_gene_anno <- gene_anno[,c(2,13,14,15)]
+colnames(MGH78578_gene_anno) <- c("gene","productinhvkp4","Symbolinhvkp4","Locus.taginhvkp4")
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.fna"
+MGH78578_stringset <- readDNAStringSet(fasta_file)
+
+SH12_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
+SH12_annoData <- toGRanges(SH12_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_geneanno.gff",sep="\t",header=F)
+SH12_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+SH12_gene_anno  <- SH12_gene_anno[,c(1,9,10)]
+SH12_gene_anno$V9 <- sub("ID=gene-", "", SH12_gene_anno$V9)
+SH12_gene_anno$Symbolinhvkp4 <- sub("Name=", "", SH12_gene_anno$V10)
+SH12_gene_anno1  <- SH12_gene_anno
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_cds.txt",sep="\t",header=F)
+gene_anno$V2 <- str_extract(gene_anno$V2, "WP_[^_]+\\.1")
+gene_anno <- gene_anno[order(gene_anno$V9,decreasing = F),] %>%
+  distinct(V1, .keep_all = T)
+gene_anno <- merge(gene_anno,kp_gene_anno,by.x="V2",by.y="Protein.accession")
+SH12_gene_anno <- gene_anno[,c(2,13,14,15)]
+colnames(SH12_gene_anno) <- c("gene","productinhvkp4","Symbolinhvkp4","Locus.taginhvkp4")
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.fna"
+SH12_stringset <- readDNAStringSet(fasta_file)
+
+# define peak anno fuction
+peak.anno <- function(peak.file){
+  peak <- peak.file
+  peak_gr <- GRanges(seqnames="chr1",
+                   ranges=IRanges(start=as.numeric(as.matrix(peak[,2])),
+                                  end= as.numeric(as.matrix(peak[,3])),
+                                  names=as.matrix(as.matrix(peak[,4])),
+                                  weight=as.numeric(peak[,5])))
+  db <- get(paste0(sp,"_annoData"))
+  annotatedpeak <- annotatePeakInBatch(peak_gr, AnnotationData=db)
+  df <- as.data.frame(annotatedpeak)
+  return(df)
+}
+```
+### Calculate how many genes were mapped to three different genome form hvkp4
+```{r}
+ggplot(data.frame(name = c("HKU57","MGH78578","SH12"), percentage = c(5333/5571, 5429/5693,5788/6287)), aes(x=name,y=percentage)) +
+  geom_bar(stat="identity")+
+  geom_text(aes(label=scales::percent(percentage)), vjust=-0.3) +
+  ylim(0,1.1)
+
+ggsave("/Users/lubeifang/Desktop/per.pdf",width=3,height = 3)
+```
+
+```{r}
+peak.list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/raw/")
+
+for (i in peak.list){
+  print(i)
+  sp <- strsplit(i,"-")[[1]][1]
+  peaks <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/raw/",i),sep = "\t", header = F)
+  col_names <- c("chr", "start", "end", "peak_name", "score",
+                 "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+                 "relativesummitpositiontopeakstart")
+  colnames(peaks) <- col_names
+  # Only keep the chr
+  chr1 <- get(paste0(sp,"_gene_anno1"))[1,1]
+  peaks <- subset(peaks,chr == chr1)
+  peaks <- peaks[peaks$`-log10pvalue` >= 2,]
+  peaks.annotated <- peak.anno(peaks)
+  anno <- merge(peaks,peaks.annotated, by="start", sort = F, all.x = T)
+  anno <- merge(anno, get(paste0(sp,"_gene_anno")), by.x = "feature", by.y = "gene",all.x=T)
+  anno <- anno[order(anno$"signalValue",decreasing=T),]
+  
+  write.csv(anno,paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/",i,".csv"),row.names = F)
+# 
+# # write fasta
+#   gR <- GRanges(seqnames = "chr1",
+#                 ranges = IRanges(start = anno$start, end = anno$end.x),
+#                 strand = "*")
+#   gR <- resize(gR,50, "center")
+#   st <- get(paste0(sp,"_stringset"))
+#   sequences <- get_sequence(gR, st)
+#   writeXStringSet(sequences, paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/fasta/",i,".fasta"), append=FALSE,
+#                 compress=FALSE, compression_level=NA, format="fasta")
+}
+```
+
+### intersection of gene annotation
+```{R}
+library(ggVennDiagram)
+library(gridExtra)
+
+Kp_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS00760.csv")
+Kp_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS09805.csv")
+Kp_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS12175.csv")
+Kp_G3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS14510.csv")
+Kp_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS15210.csv")
+Kp_P17 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS07795.csv")
+Kp_Q15 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS18490.csv")
+Kp_R9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS21375.csv")
+
+HKU57_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-A7.bed.csv")
+HKU57_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-D20.bed.csv")
+HKU57_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-F3.bed.csv")
+HKU57_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-G7.bed.csv")
+HKU57_Q15 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-Q15.bed.csv")
+HKU57_R9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-R9.bed.csv")
+
+MGH78578_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-A7.bed.csv")
+MGH78578_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-D20.bed.csv")
+MGH78578_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-F3.bed.csv")
+MGH78578_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-G7.bed.csv")
+
+SH12_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-A7.bed.csv")
+SH12_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-D20.bed.csv")
+SH12_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-F3.bed.csv")
+SH12_G3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-G3.bed.csv")
+SH12_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-G7.bed.csv")
+SH12_P17 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-P17.bed.csv")
+SH12_Q15 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-Q15.bed.csv")
+SH12_R9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-R9.bed.csv")
+
+
+plot_list <- list()
+for (i in c("_A7","_D20","_F3","_G7","_R9","_G3","_P17","_Q15")){
+  print(i)
+  if (i != "_G3" & i != "_R9" & i != "_P17" & i != "_Q15") {
+    a <- get(paste0("Kp",i))
+    b <- get(paste0("HKU57",i))
+    c <- get(paste0("MGH78578",i))
+    d <- get(paste0("SH12",i))
+    x <- list(Kp = a$Symbol[a$Symbol != "" & !is.na(a$Symbol)],
+              HKU57 = b$Symbolinhvkp4[b$Symbolinhvkp4 != "" & !is.na(b$Symbolinhvkp4)],
+              MGH78578 = c$Symbolinhvkp4[c$Symbolinhvkp4 != "" & !is.na(c$Symbolinhvkp4)],
+              SH12 = d$Symbolinhvkp4[d$Symbolinhvkp4 != "" & !is.na(d$Symbolinhvkp4)])
+    p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+      scale_fill_gradient(low="white",high = "#C6AEBA") +
+      theme(legend.position = "none")
+    p <- p + ggtitle(paste0("TF",i))
+    plot_list[[length(plot_list) + 1]] <- p
+  }
+  else{
+    if (i == "_G3" | i == "_P17") {
+      a <- get(paste0("Kp",i))
+      d <- get(paste0("SH12",i))
+      x <- list(Kp = a$Symbol[a$Symbol != "" & !is.na(a$Symbol)],
+                SH12 = d$Symbolinhvkp4[d$Symbolinhvkp4 != "" & !is.na(d$Symbolinhvkp4)])
+      p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+        scale_fill_gradient(low="white",high = "#C6AEBA") +
+        theme(legend.position = "none")
+      p <- p + ggtitle(paste0("TF",i))
+      plot_list[[length(plot_list) + 1]] <- p
+    }
+    else{
+      a <- get(paste0("Kp",i))
+      b <- get(paste0("HKU57",i))
+      d <- get(paste0("SH12",i))
+      x <- list(Kp = a$Symbol[a$Symbol != "" & !is.na(a$Symbol)],
+                HKU57 = b$Symbolinhvkp4[b$Symbolinhvkp4 != "" & !is.na(b$Symbolinhvkp4)],
+                SH12 = d$Symbolinhvkp4[d$Symbolinhvkp4 != "" & !is.na(d$Symbolinhvkp4)])
+      p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+        scale_fill_gradient(low="white",high = "#C6AEBA") +
+        theme(legend.position = "none")
+      p <- p + ggtitle(paste0("TF",i))
+      plot_list[[length(plot_list) + 1]] <- p
+    }
+  }
+}
+
+g <- arrangeGrob(grobs = plot_list, nrow=2) 
+ggsave("/Users/lubeifang/Desktop/venn.pdf",g, width = 8, height = 6)
+```
+
+
+
+
+
+
+
+
+
+
+
+---------------old----------------
+```{r}
+rm(list=ls())
+library(ChIPseeker)
+library(ChIPpeakAnno)
+library(clusterProfiler)
+require(GenomicFeatures)
+library(GenomicRanges)
+library(readxl)
+library(ggplot2)
+library(devEMF)
+library(Biostrings)
+library(memes)
+getwd()
+
+##### Kleb-DAPseq #####
+############Kleb hvkp4###############
+########come on PEAKS!!!###########
+# load annotation
+HKU57_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
+HKU57_annoData <- toGRanges(HKU57_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_geneanno.gff",sep="\t",header=F)
+HKU57_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+HKU57_gene_anno  <- HKU57_gene_anno[,c(1,9,10)]
+HKU57_gene_anno$V9 <- sub("ID=gene-", "", HKU57_gene_anno$V9)
+HKU57_gene_anno$Symbolinhvkp4 <- sub("Name=", "", HKU57_gene_anno$Symbolinhvkp4)
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.fna"
+HKU57_stringset <- readDNAStringSet(fasta_file)
+
+MGH78578_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
+MGH78578_annoData <- toGRanges(MGH78578_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_geneanno.gff",sep="\t",header=F)
+MGH78578_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+MGH78578_gene_anno  <- MGH78578_gene_anno[,c(1,9,10)]
+MGH78578_gene_anno$V9 <- sub("ID=gene-", "", MGH78578_gene_anno$V9)
+MGH78578_gene_anno$Symbolinhvkp4 <- sub("Name=", "", MGH78578_gene_anno$Symbolinhvkp4)
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.fna"
+MGH78578_stringset <- readDNAStringSet(fasta_file)
+
+SH12_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
+SH12_annoData <- toGRanges(SH12_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_geneanno.gff",sep="\t",header=F)
+SH12_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+SH12_gene_anno  <- SH12_gene_anno[,c(1,9,10)]
+SH12_gene_anno$V9 <- sub("ID=gene-", "", SH12_gene_anno$V9)
+SH12_gene_anno$Symbolinhvkp4 <- sub("Name=", "", SH12_gene_anno$Symbolinhvkp4)
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.fna"
+SH12_stringset <- readDNAStringSet(fasta_file)
+
+# define peak anno fuction
+peak.anno <- function(peak.file){
+  peak <- peak.file
+  peak_gr <- GRanges(seqnames="chr1",
+                   ranges=IRanges(start=as.numeric(as.matrix(peak[,2])),
+                                  end= as.numeric(as.matrix(peak[,3])),
+                                  names=as.matrix(as.matrix(peak[,4])),
+                                  weight=as.numeric(peak[,5])))
+  db <- get(paste0(sp,"_annoData"))
+  annotatedpeak <- annotatePeakInBatch(peak_gr, AnnotationData=db)
+  df <- as.data.frame(annotatedpeak)
+  return(df)
+}
+```
+
+```{r}
+peak.list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/raw/")
+
+for (i in peak.list){
+  print(i)
+  sp <- strsplit(i,"-")[[1]][1]
+  peaks <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/raw/",i),sep = "\t", header = F)
+  col_names <- c("chr", "start", "end", "peak_name", "score",
+                 "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+                 "relativesummitpositiontopeakstart")
+  colnames(peaks) <- col_names
+  # Only keep the chr
+  chr1 <- get(paste0(sp,"_gene_anno"))[1,1]
+  peaks <- subset(peaks,chr == chr1)
+  peaks <- peaks[peaks$`-log10pvalue` >= 2,]
+  peaks.annotated <- peak.anno(peaks)
+  anno <- merge(peaks,peaks.annotated, by="start", sort = F, all.x = T)
+  anno <- merge(anno, get(paste0(sp,"_gene_anno")), by.x = "feature", by.y = "V9",all.x=T)
+  anno <- anno[order(anno$"signalValue",decreasing=T),]
+  
+  write.csv(anno,paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/",i,".csv"),row.names = F)
+
+# write fasta
+  gR <- GRanges(seqnames = "chr1",
+                ranges = IRanges(start = anno$start, end = anno$end.x),
+                strand = "*")
+  gR <- resize(gR,50, "center")
+  st <- get(paste0(sp,"_stringset"))
+  sequences <- get_sequence(gR, st)
+  writeXStringSet(sequences, paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/fasta/",i,".fasta"), append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+}
+```
+
+### intersection of gene annotation
+```{R}
+library(ggVennDiagram)
+library(gridExtra)
+
+Kp_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS00760.csv")
+Kp_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS09805.csv")
+Kp_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS12175.csv")
+Kp_G3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS14510.csv")
+Kp_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS15210.csv")
+Kp_P17 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS07795.csv")
+Kp_Q15 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS18490.csv")
+Kp_R9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/annotated_peak/RS21375.csv")
+
+HKU57_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-A7.bed.csv")
+HKU57_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-D20.bed.csv")
+HKU57_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-F3.bed.csv")
+HKU57_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-G7.bed.csv")
+HKU57_Q15 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-Q15.bed.csv")
+HKU57_R9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/HKU57-R9.bed.csv")
+
+MGH78578_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-A7.bed.csv")
+MGH78578_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-D20.bed.csv")
+MGH78578_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-F3.bed.csv")
+MGH78578_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/MGH78578-G7.bed.csv")
+
+SH12_A7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-A7.bed.csv")
+SH12_D20 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-D20.bed.csv")
+SH12_F3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-F3.bed.csv")
+SH12_G3 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-G3.bed.csv")
+SH12_G7 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-G7.bed.csv")
+SH12_P17 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-P17.bed.csv")
+SH12_Q15 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-Q15.bed.csv")
+SH12_R9 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/SH12-R9.bed.csv")
+
+
+plot_list <- list()
+for (i in c("_A7","_D20","_F3","_G7","_R9","_G3","_P17","_Q15")){
+  print(i)
+  if (i != "_G3" & i != "_R9" & i != "_P17" & i != "_Q15") {
+    a <- get(paste0("Kp",i))
+    b <- get(paste0("HKU57",i))
+    c <- get(paste0("MGH78578",i))
+    d <- get(paste0("SH12",i))
+    x <- list(Kp = a$Symbol[a$Symbol != "" & !is.na(a$Symbol)],
+              HKU57 = b$Symbolinhvkp4[b$Symbolinhvkp4 != "" & !is.na(b$Symbolinhvkp4)],
+              MGH78578 = c$Symbolinhvkp4[c$Symbolinhvkp4 != "" & !is.na(c$Symbolinhvkp4)],
+              SH12 = d$Symbolinhvkp4[d$Symbolinhvkp4 != "" & !is.na(d$Symbolinhvkp4)])
+    p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+      scale_fill_gradient(low="white",high = "#C6AEBA") +
+      theme(legend.position = "none")
+    p <- p + ggtitle(paste0("TF",i))
+    plot_list[[length(plot_list) + 1]] <- p
+  }
+  else{
+    if (i == "_G3" | i == "_P17") {
+      a <- get(paste0("Kp",i))
+      d <- get(paste0("SH12",i))
+      x <- list(Kp = a$Symbol[a$Symbol != "" & !is.na(a$Symbol)],
+                SH12 = d$Symbolinhvkp4[d$Symbolinhvkp4 != "" & !is.na(d$Symbolinhvkp4)])
+      p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+        scale_fill_gradient(low="white",high = "#C6AEBA") +
+        theme(legend.position = "none")
+      p <- p + ggtitle(paste0("TF",i))
+      plot_list[[length(plot_list) + 1]] <- p
+    }
+    else{
+      a <- get(paste0("Kp",i))
+      b <- get(paste0("HKU57",i))
+      d <- get(paste0("SH12",i))
+      x <- list(Kp = a$Symbol[a$Symbol != "" & !is.na(a$Symbol)],
+                HKU57 = b$Symbolinhvkp4[b$Symbolinhvkp4 != "" & !is.na(b$Symbolinhvkp4)],
+                SH12 = d$Symbolinhvkp4[d$Symbolinhvkp4 != "" & !is.na(d$Symbolinhvkp4)])
+      p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+        scale_fill_gradient(low="white",high = "#C6AEBA") +
+        theme(legend.position = "none")
+      p <- p + ggtitle(paste0("TF",i))
+      plot_list[[length(plot_list) + 1]] <- p
+    }
+  }
+}
+
+g <- arrangeGrob(grobs = plot_list, nrow=2) 
+ggsave("/Users/lubeifang/Desktop/venn.pdf",g, width = 8, height = 6)
+```
+
+
+## Compare with predict data
+```{r}
+library(ggVennDiagram)
+library(gridExtra)
+
+file_list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno_original/")
+plot_list <- list()
+for (i in c("HKU57","SH12","MGH78578")){
+  print(i)
+  for (k in c("RS00760","RS07795","RS09805","RS12175","RS15210","RS18490","RS21375")){
+    print(k)
+    name <- paste0(i,"-",k,".csv")
+    if (name %in% file_list){
+      dap <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno_original/",i,"-",k,".csv"))
+      pred <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/pred_27/",k,".fa_",i,".csv"))
+      pred$Gene.Name <- gsub("gene-","",pred$Gene.Name)
+      pred <- pred[order(pred$Prediction,decreasing = T),]
+      dap_pro <- dap[dap$insideFeature == "upstream" | dap$insideFeature == "overlapStart",][,c(1,8)] %>% distinct()
+      
+      co <- merge(pred,dap_pro,by.x="Gene.Name", by.y="feature",all.x = T)
+      co$signalValue <- ifelse(is.na(co$signalValue),0,co$signalValue)
+      print(cor(co[,c(2,3)],method = c("pearson")))
+      
+      x = list(
+        "Predict" = pred[pred$Prediction > 0.9,]$Gene.Name,
+        # "Predict" = pred$Gene.Name,
+        "DAP-seq" = dap_pro$feature)
+      
+      p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
+        scale_fill_gradient(low="white",high = "#C6AEBA") +
+        theme(legend.position = "none")
+      p <- p + ggtitle(paste0(i,"-",k))
+      plot_list[[length(plot_list) + 1]] <- p
+    }
+  }
+}
+
+g <- arrangeGrob(grobs = plot_list, nrow=4) 
+ggsave("/Users/lubeifang/Desktop/pred.pdf",g, width = 8, height = 10)
+```
+
+
+## Use predict to call motif
+```{r}
+rm(list=ls())
+library(ChIPseeker)
+library(ChIPpeakAnno)
+library(clusterProfiler)
+require(GenomicFeatures)
+library(GenomicRanges)
+library(readxl)
+library(ggplot2)
+library(devEMF)
+library(Biostrings)
+library(memes)
+getwd()
+
+##### Kleb-DAPseq #####
+############Kleb hvkp4###############
+########come on PEAKS!!!###########
+# load annotation
+HKU57_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
+HKU57_annoData <- toGRanges(HKU57_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_geneanno.gff",sep="\t",header=F)
+HKU57_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+HKU57_gene_anno  <- HKU57_gene_anno[,c(1,9,10)]
+HKU57_gene_anno$V9 <- sub("ID=gene-", "", HKU57_gene_anno$V9)
+HKU57_gene_anno$Symbolinhvkp4 <- sub("Name=", "", HKU57_gene_anno$Symbolinhvkp4)
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.fna"
+HKU57_stringset <- readDNAStringSet(fasta_file)
+
+MGH78578_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
+MGH78578_annoData <- toGRanges(MGH78578_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_geneanno.gff",sep="\t",header=F)
+MGH78578_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+MGH78578_gene_anno  <- MGH78578_gene_anno[,c(1,9,10)]
+MGH78578_gene_anno$V9 <- sub("ID=gene-", "", MGH78578_gene_anno$V9)
+MGH78578_gene_anno$Symbolinhvkp4 <- sub("Name=", "", MGH78578_gene_anno$Symbolinhvkp4)
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.fna"
+MGH78578_stringset <- readDNAStringSet(fasta_file)
+
+SH12_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
+SH12_annoData <- toGRanges(SH12_txdb, feature="gene")
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_geneanno.gff",sep="\t",header=F)
+SH12_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
+SH12_gene_anno  <- SH12_gene_anno[,c(1,9,10)]
+SH12_gene_anno$V9 <- sub("ID=gene-", "", SH12_gene_anno$V9)
+SH12_gene_anno$Symbolinhvkp4 <- sub("Name=", "", SH12_gene_anno$Symbolinhvkp4)
+fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.fna"
+SH12_stringset <- readDNAStringSet(fasta_file)
+
+# define peak anno fuction
+peak.anno <- function(peak.file){
+  peak <- peak.file
+  peak_gr <- GRanges(seqnames="chr1",
+                   ranges=IRanges(start=as.numeric(as.matrix(peak[,2])),
+                                  end= as.numeric(as.matrix(peak[,3])),
+                                  names=as.matrix(as.matrix(peak[,4])),
+                                  weight=as.numeric(peak[,5])))
+  db <- get(paste0(sp,"_annoData"))
+  annotatedpeak <- annotatePeakInBatch(peak_gr, AnnotationData=db)
+  df <- as.data.frame(annotatedpeak)
+  return(df)
+}
+```
+
+```{r}
+peak.list <- list.files("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/raw/")
+
+for (i in peak.list){
+  print(i)
+  sp <- strsplit(i,"-")[[1]][1]
+  peaks <- read.csv(paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/raw/",i),sep = "\t", header = F)
+  col_names <- c("chr", "start", "end", "peak_name", "score",
+                 "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+                 "relativesummitpositiontopeakstart")
+  colnames(peaks) <- col_names
+  # Only keep the chr
+  chr1 <- get(paste0(sp,"_gene_anno"))[1,1]
+  peaks <- subset(peaks,chr == chr1)
+  peaks <- peaks[peaks$`-log10pvalue` >= 2,]
+  peaks.annotated <- peak.anno(peaks)
+  anno <- merge(peaks,peaks.annotated, by="start", sort = F, all.x = T)
+  anno <- merge(anno, get(paste0(sp,"_gene_anno")), by.x = "feature", by.y = "V9",all.x=T)
+  anno <- anno[order(anno$"signalValue",decreasing=T),]
+  
+  write.csv(anno,paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/anno/",i,".csv"),row.names = F)
+
+# write fasta
+  gR <- GRanges(seqnames = "chr1",
+                ranges = IRanges(start = anno$start, end = anno$end.x),
+                strand = "*")
+  gR <- resize(gR,50, "center")
+  st <- get(paste0(sp,"_stringset"))
+  sequences <- get_sequence(gR, st)
+  writeXStringSet(sequences, paste0("/Users/lubeifang/Desktop/Kleb_dap/evoDAP-bed/fasta/",i,".fasta"), append=FALSE,
+                compress=FALSE, compression_level=NA, format="fasta")
+}
+
+
+```
