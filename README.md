@@ -26,7 +26,7 @@ A deep learning-based framework for predicting transcription factor (TF) binding
    - Residual connections
    - Final dense layers for prediction
 
-### Dependencies 📦
+## Dependencies 📦
 
 Mandatory software:
 
@@ -45,7 +45,7 @@ Mandatory software:
 | **memes**  | 1.8.0  |R|
 | **Giraffe**  | 0.1.0.14  |Pypi|
 
-### Usage examples 💻
+## Usage examples 💻
 ```python
 # Load model and make predictions
 from kp_dl_framework import TFPredictor
@@ -64,3 +64,6 @@ network = predictor.infer_network(
     expression_data=expr_data
 )
 ```
+
+## Cite us
+Conservation and Global Patterns of Transcription Factor Networks in Klebsiella pneumoniae<img width="432" height="75" alt="image" src="https://github.com/user-attachments/assets/54b87291-1ad2-4736-bec0-440af5decffc" />
