@@ -1,6 +1,6 @@
 # KP-GRN predict
 
-![abstract](figures/TFBS.pdf)
+![model](figures/TFBS.pdf)
 
 ## Overview 🔍
 This repository contains the analysis pipeline and KP isolate GRN prediction model.
