@@ -3,8 +3,9 @@
 ## antibio
 
 ```{r}
+library(dplyr)
 # Annotate antibiotic resistant genes
-blast=read.csv("/Users/lubeifang/Desktop/anti_results.txt", sep = "\t", header = F)
+blast=read.csv("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure3/anti/anti_results.txt", sep = "\t", header = F)
 # blast$V1 <- sapply(strsplit(blast$V1, ":"), `[`, 1)
 colnames(blast) = c("Query_id","Subject_id","Identity","Align_length","Miss_match",
                     "Gap","Query_start","Query_end","Subject_start","Subject_end","E_value","Score")

@@ -52,7 +52,7 @@ ootpm <- ootpm+1
 # write.csv(ootpm, file="/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
 
 
-
+ootpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
 
 # change into dataframe
 ootpm$Gene <- rownames(ootpm)
@@ -74,6 +74,11 @@ library(pheatmap)
 
 rows_to_keep <-  apply(ootpm[,c(1:4)], 1, function(row) length(unique(row)) > 1)
 tpm <- ootpm[rows_to_keep, ][,c(1:4)]
+# tpm <- as.matrix(tpm)
+# rownames(tpm) <- ootpm$X
+# sum(is.na(tpm))
+# sum(is.infinite(tpm))
+# sum(is.nan(tpm))
 
 pheatmap_result <- pheatmap(tpm,
          scale = "row",
@@ -266,6 +271,8 @@ ggplot(data, aes(x = variable, y = value, group=Gene)) +
 ```{R}
 # define the change
 change.trend.df <- data.frame(Gene=yes.change.gene$Gene)
+
+change.trend.df <- read.csv("/Users/lubeifang/Desktop/SD7_56TFchangeTYPE.csv")
 # 2 means up, 1 means no change, 0 means dwon
 change.trend.df$cc1 <- ifelse(yes.change.gene$c1>=2, "2", ifelse(yes.change.gene$c1 <=-2, "0","1"))
 change.trend.df$cc2 <- ifelse(yes.change.gene$c2>=2, "2", ifelse(yes.change.gene$c2 <=-2, "0","1"))
@@ -728,12 +735,13 @@ c24.down.TF <- merge(c24.down.gene, TF_pfam,by="Gene")
 
 
 
-#### TF change 3D plot
+# TF change 3D plot
 ```{R}
 rm(list=ls())
 
 library(ggplot2)
 library(dplyr)
+
 
 TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
 tpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
@@ -777,6 +785,19 @@ with(change.df, {
        pos = 4)
   })
 dev.off()
+
+
+# 2 means up, 1 means no change, 0 means dwon
+change.df$cc1 <- ifelse(change.df$c1>=2, "2", ifelse(change.df$c1 <=-2, "0","1"))
+change.df$cc2 <- ifelse(change.df$c2>=2, "2", ifelse(change.df$c2 <=-2, "0","1"))
+change.df$cc3 <- ifelse(change.df$c3>=2, "2", ifelse(change.df$c3 <=-2, "0","1"))
+change.df$cc <- paste(change.df$cc1, change.df$cc2, change.df$cc3)
+
+type <- as.data.frame(table(change.df$cc))
+type$Type <- c(1,2,3,0,4,5,6,7,8)
+
+change.df <- merge(change.df,type,by.x="cc",by.y="Var1")
+# write.csv(change.df,"/Users/lubeifang/Desktop/SD7.csv",row.names = F)
 ```
 
 
@@ -795,7 +816,8 @@ ggplot(temp,aes(x=Var1,y=Freq,fill=Var1)) +
         panel.grid.minor = element_blank(),
         legend.position = "none") +
   xlab("TF in Cluster") +
-  ylab("Counts") 
+  ylab("Counts")+
+  geom_text(aes(label = Freq), vjust = -0.3, color = "black")
 # ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure5/tfinC_counts.pdf",width=2.3,height = 3)
 ```
 
@@ -803,9 +825,9 @@ ggplot(temp,aes(x=Var1,y=Freq,fill=Var1)) +
 ### Sankey plot
 ```{R}
 library(ggsankey)
-change.trend.TF
+change.df
 tfinC
-TF_type_cluster <- merge(tfinC,change.trend.df,by="Gene",all.x = T)
+TF_type_cluster <- merge(tfinC,change.df,by="Gene",all.x = T)
 TF_type_cluster$cc[is.na(TF_type_cluster$cc)] <- 0
 
 df <- make_long(TF_type_cluster, Cluster, cc)

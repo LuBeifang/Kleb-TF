@@ -45,6 +45,7 @@ st$Geographic.Location <- ifelse(is.na(st$Geographic.Location), "no_info",st$Geo
 country_count <- data.frame(table(st$Geographic.Location))
 country_count$geo <- ifelse(country_count$Freq < 10, "others", as.character(country_count$Var1))
 st <- merge(st,country_count,by.x="Geographic.Location",by.y="Var1")
+write.csv(st,"/Users/lubeifang/Desktop/Kleb_dap/publication/SD9_2058KP.csv",row.names = F)
 
 blast_g <- merge(blast_f,st[,c(2,3,6,7,11,15)],by.x="refseq",by.y="strain")
 
@@ -57,7 +58,7 @@ ggplot(blast_g, aes(x=st, y=Identity, fill=st)) +
         axis.text.x = element_text(angle = 45,vjust=1,hjust=1)) +
   geom_text(data = st_count,aes(x=st,y=99,label=label), vjust=-0.3)
 
-ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/st_identity.pdf",width = 15, height = 3)
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/st_identity.pdf",width = 15, height = 3)
 ```
 
 ##cluster identity

@@ -119,7 +119,7 @@ ggplot(tf_counts, aes(x = TF, y = Count)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   geom_text(aes(label=Count), vjust = -0.3, size = 3)
 
-
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/96TF_bar.pdf", width = 18, height = 6)
 ```
 
 
@@ -147,4 +147,32 @@ for (i in peak.list){
 }
 
 write.csv(tf_counts,"/Users/lubeifang/Desktop/a.csv")
+```
+
+## plot
+```{r}
+library(patchwork)
+training_history <- read.csv("/Users/lubeifang/Desktop/training_history_96TF_test0824.csv")
+
+p1<- ggplot(training_history)+
+  geom_line(aes(x=epoch,y=train_loss,color="trainL"))+
+  geom_line(aes(x=epoch,y=val_loss,color="valL")) +
+  scale_color_manual(values = c("trainL"="lightgreen","valL"="lightblue")) +
+  theme_bw()
+
+p2<-ggplot(training_history)+
+  geom_line(aes(x=epoch,y=val_auc,color="auc"))+
+  geom_line(aes(x=epoch,y=val_auprc,color="auprc")) +
+  scale_color_manual(values = c("auc"="pink","auprc"="orange")) +
+  theme_bw()
+p <- p1+p2
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/train.pdf", p, width = 10, height = 3)
+
+test_matrix <- read.csv("/Users/lubeifang/Desktop/test_matrix_96TF_test0824.csv")
+
+ggplot(test_matrix,aes(x=Predictions,group = as.factor(Labels),fill= as.factor(Labels)))+
+  geom_density(alpha=0.7) +
+  theme_bw()
+
+
 ```
