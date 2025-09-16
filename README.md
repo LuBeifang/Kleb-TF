@@ -6,7 +6,7 @@ This GitHub repository contains all the custom scripts and shell commands used i
 
 
 ## Graphic abstract
-![abstract](fig/TFBS.png)
+![abstract](abstract/TFBS.png)
 
 ## Data available
 All raw sequence files are uploaded to NCBI (GEO:[GSE306886](https:)).
