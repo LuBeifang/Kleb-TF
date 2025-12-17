@@ -17,7 +17,7 @@ getwd()
 ############Kleb hvkp4###############
 ########come on PEAKS!!!###########
 # load annotation
-hvkp4_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/BIOTOOLS/ref/CHIPPEAKANNO/hvkp4.gff")
+hvkp4_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/BIOTOOLS/ref/CHIPPEAKANNO/hvkp4.gff")
 hvkp4_annoData <- toGRanges(hvkp4_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno0531.csv")
 TF_name <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
@@ -174,5 +174,72 @@ ggplot(test_matrix,aes(x=Predictions,group = as.factor(Labels),fill= as.factor(L
   geom_density(alpha=0.7) +
   theme_bw()
 
+
+```
+```{R}
+off_limits_list <- data.frame()
+peak <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail4/allpeak_96TF.csv",header = F)
+for (i in unique(peak$V1)){
+  print(i)
+  peaks <- peak[peak$V1 == i,]
+  col_names <- c("TF","chr", "start", "end", "peak_name", "score",
+                 "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+                 "relativesummitpositiontopeakstart")
+  colnames(peaks) <- col_names
+
+  peaks$chr <- case_when(
+    peaks$chr == "NZ_CP040539.1" ~ "chr1",
+    TRUE ~  peaks$chr)
+  
+
+    gR <- GRanges(seqnames = peaks$chr,
+                  ranges = IRanges(start = peaks$start, end = peaks$end),
+                  strand = "*")
+    gR <- resize(gR,201, "center")
+    
+    off_limits <- which(
+  start(gR) < 1 |
+    end(gR) > seqlengths(kp_stringset)[as.character(seqnames(gR))]
+)
+    if (length(off_limits) >0){
+      temp <- data.frame(TF = i, off_limits = length(off_limits))
+      off_limits_list <- rbind(off_limits_list, temp)
+      gR<- gR[-off_limits]
+    }
+    sequences <- get_sequence(gR, kp_stringset)
+    writeXStringSet(sequences, paste0("/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail4/peak_fasta/",i,".fasta"), append=FALSE,
+                    compress=FALSE, compression_level=NA, format="fasta")
+  
+}
+
+# peaks <- peak[peak$V1 == "RS22030",]
+#   col_names <- c("TF","chr", "start", "end", "peak_name", "score",
+#                  "strand", "signalValue", "-log10pvalue", "-log10qvalue", 
+#                  "relativesummitpositiontopeakstart")
+#   colnames(peaks) <- col_names
+# 
+#   peaks$chr <- case_when(
+#     peaks$chr == "NZ_CP040539.1" ~ "chr1",
+#     TRUE ~  peaks$chr)
+#   
+# 
+#     gR <- GRanges(seqnames = peaks$chr,
+#                   ranges = IRanges(start = peaks$start, end = peaks$end),
+#                   strand = "*")
+#     gR <- resize(gR,201, "center")
+#     
+# which(
+#   start(gR) < 1 |
+#     end(gR) > seqlengths(kp_stringset)[as.character(seqnames(gR))]
+# )
+# 
+# peaks[87,]
+
+A8-1_L6_peak_1446
+D20-1_L4_peak_2940
+J13-1_L4_peak_404
+
+peak <- peak[peak$V6 != "A8-1_L6_peak_1446" & peak$V6 != "D20-1_L4_peak_2940" & peak$V6 != "J13-1_L4_peak_404",]
+write.csv(peak,"/Users/lubeifang/Desktop/Kleb_dap/ML/tf_bind/data/Trail4/allpeak_96TF_noofflimit.csv",row.names = F)
 
 ```

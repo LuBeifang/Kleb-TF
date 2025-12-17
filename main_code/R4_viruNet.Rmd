@@ -458,6 +458,45 @@ ggsave("/Users/lubeifang/Desktop/galU_gene.pdf")
 ```
 
 
+# all peak with important TF
+```{r}
+peaks1 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/merged_peaks.csv",header = T)
+peaks2 <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/peaks/merged_peaks_plasmid.csv",header = T)
+colnames(peaks2) <- colnames(peaks1)
+peaks <- rbind(peaks1,peaks2)
+table(peaks$chr)
 
+peak_rcsB <- write.csv(peaks[peaks$TF == "RS15770",],"/Users/lubeifang/Desktop/rcsB_peak.csv",row.names = F)
+peak_mprA <- write.csv(peaks[peaks$TF == "RS13415",],"/Users/lubeifang/Desktop/mprA_peak.csv",row.names = F)
+peak_slyA <- write.csv(peaks[peaks$TF == "RS19350",],"/Users/lubeifang/Desktop/slyA_peak.csv",row.names = F)
+peak_fnr <- write.csv(peaks[peaks$TF == "RS21815",],"/Users/lubeifang/Desktop/fnr_peak.csv",row.names = F)
 
+peak_rmpA2 <- write.csv(peaks[peaks$Symbol == "rmpA2" ,],"/Users/lubeifang/Desktop/rmpA2_bind.csv",row.names = F)
+
+genes <- c("cyaA", "pyrG", "pgm", "slyA", "mprA", "RS18170", "rcsB", "rmpA", "rmpA2","envZ", "ompR", "arcB", "csrB", "ompX", "rfaH", "qseB", "qseC", "ompX", "grlR", "ompX", "argR", "glnD", "glnB", "sapB","sapC","sapD", "waaL", "arnF", "lpp")
+
+peak_important<- peaks[peaks$Symbol %in% genes,]
+table(peak_important$Symbol)
+table(peak_important$TF)
+```
+
+## plot cps
+```{R}
+library(gggenes)
+library(ggplot2)
+
+fig <- read.csv("/Users/lubeifang/Desktop/cps.csv")
+fig$orientation <- ifelse(fig$strand == "plus", TRUE, FALSE)
+
+ggplot(fig, aes(xmin = start, xmax = end, y = molecule, fill = gene, label = gene, forward = orientation)) +
+  geom_gene_arrow(arrowhead_height = unit(6, "mm"), arrowhead_width = unit(2, "mm"),
+                  arrow_body_height = unit(6, "mm")) +
+  facet_wrap(~ molecule, scales = "free", ncol = 1) +
+  scale_fill_manual(values = c(rep("#8A8DBF",23))) +
+  theme_genes() +
+  geom_gene_label(grow = T) +
+  xlim(3345594,3372129) +
+  theme(legend.position = "none")
+ggsave("/Users/lubeifang/Desktop/cps_gene.svg", width = 15, height = 4)
+```
 

@@ -222,3 +222,4 @@ p5 <- ggplot(temp, aes(x=Cate, y=log10(Stress), fill=Cate)) +
 p <- p1+p2+p3+p4+p5 + plot_layout(ncol = 5)
 ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure2/violin.pdf",p,width = 12,height = 10)
 ```
+

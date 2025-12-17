@@ -20,7 +20,7 @@ getwd()
 ##### Kleb-DAPseq #####
 ```{r}
 # load annotation
-hvkp4_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/BIOTOOLS/ref/CHIPPEAKANNO/hvkp4.gff")
+hvkp4_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/BIOTOOLS/ref/CHIPPEAKANNO/hvkp4.gff")
 hvkp4_annoData <- toGRanges(hvkp4_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno0531.csv")
 TF_name <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
@@ -83,9 +83,9 @@ for (i in peak.list){
     
       peaks$chr <- case_when(
         peaks$chr == "NZ_CP040540.1" ~ "chr2",
-        peaks$chr == "NZ_CP040541.1" ~ "chr3",
-        peaks$chr == "NZ_CP040542.1" ~ "chr4",
-        peaks$chr == "NZ_CP040543.1" ~ "chr5",
+        peaks$chr == "NZ_CP040541.1" ~ "chr6",
+        peaks$chr == "NZ_CP040542.1" ~ "chr3",
+        peaks$chr == "NZ_CP040543.1" ~ "chr4",
         peaks$chr == "NZ_CP040544.1" ~ "chr5",
         TRUE ~ NA_character_ )
       

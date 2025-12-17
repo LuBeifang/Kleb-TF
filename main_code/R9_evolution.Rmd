@@ -45,7 +45,7 @@ st$Geographic.Location <- ifelse(is.na(st$Geographic.Location), "no_info",st$Geo
 country_count <- data.frame(table(st$Geographic.Location))
 country_count$geo <- ifelse(country_count$Freq < 10, "others", as.character(country_count$Var1))
 st <- merge(st,country_count,by.x="Geographic.Location",by.y="Var1")
-write.csv(st,"/Users/lubeifang/Desktop/Kleb_dap/publication/SD9_2058KP.csv",row.names = F)
+# write.csv(st,"/Users/lubeifang/Desktop/Kleb_dap/publication/SD9_2058KP.csv",row.names = F)
 
 blast_g <- merge(blast_f,st[,c(2,3,6,7,11,15)],by.x="refseq",by.y="strain")
 
@@ -461,6 +461,249 @@ ggplot(data = world) +
 ggsave("/Users/lubeifang/Desktop/b.pdf",width = 10,height = 8.5)
 ```
 
+# Pan-genome
+```{r}
+rm(list=ls())
+library(data.table)
+library(dplyr)
+
+roary = fread("/Users/lubeifang/Desktop/Kleb_dap/files/gene_presence_absence.csv")
+roary_hvkp4 <- cbind(roary[,c(1:14)],roary[,c('hvkp4')])
+roary_hvkp4 <- roary_hvkp4[roary_hvkp4$hvkp4 != "",]
+roary_hvkp4$hvkp4_2 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 2)
+roary_hvkp4$hvkp4_3 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 3)
+roary_hvkp4$hvkp4_4 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 4)
+roary_hvkp4$hvkp4_5 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 5)
+roary_hvkp4$hvkp4_6 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 6)
+roary_hvkp4$hvkp4_7 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 7)
+roary_hvkp4$hvkp4_8 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 8)
+roary_hvkp4$hvkp4 <- sapply(strsplit(roary_hvkp4$hvkp4, "\t"), `[`, 1)
+
+roary_hvkp4 <- bind_rows(
+  roary_hvkp4[, 1:15],
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_2 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_2 != "", ]$hvkp4_2),
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_3 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_3 != "", ]$hvkp4_3),
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_4 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_4 != "", ]$hvkp4_4),
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_5 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_5 != "", ]$hvkp4_5),
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_6 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_6 != "", ]$hvkp4_6),
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_7 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_7 != "", ]$hvkp4_7),
+  data.frame(as.data.frame(roary_hvkp4[roary_hvkp4$hvkp4_8 != "", ][, 1:14]), hvkp4 = roary_hvkp4[roary_hvkp4$hvkp4_8 != "", ]$hvkp4_8)
+)
+roary_hvkp4 <- distinct(roary_hvkp4, hvkp4, .keep_all=TRUE)
+
+fixed <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/hvkp4_fixed.gff", sep = "\t",header = F,skip=9)
+fixed <- fixed[fixed$V3 == 'CDS',]
+fixed$ID <- sapply(strsplit(fixed$V9, ";"), `[`, 1)
+fixed$ID <- sapply(strsplit(fixed$ID, "="), `[`, 2)
+fixed$Gene <- sapply(strsplit(fixed$V9, ";"), `[`, 2)
+fixed$Gene <- sapply(strsplit(fixed$Gene, "_"), `[`, 2)
+fixed$Protein <- sapply(strsplit(fixed$V9, ";"), `[`, 3)
+fixed$Protein<- sapply(strsplit(fixed$Protein, ":"), `[`, 2)
+# write.csv(fixed[,c(10,12)],"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/hvkp4_fixed_genes.csv",row.names = F)
+roary_hvkp4 <- merge(roary_hvkp4,fixed[,c(10,11)],by.x="hvkp4",by.y="ID",all.x=T)
+
+
+TF <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
+anti_join(TF,fixed, by="Gene")
+TF_roary <- merge(TF[,c(2,18)],roary_hvkp4, by.x="Gene",by.y="Gene.y")
+setdiff(TF$Gene,TF_roary$Gene)
+# writeLines(TF_roary$Gene.x,"/Users/lubeifang/Desktop/366TF_cluster_name.txt")
+
+TF_roary$freq <- TF_roary$`No. isolates`/2059
+TF_roary <- TF_roary %>%
+  mutate(category = case_when(
+    freq >= 0.99 ~ "core",
+    freq >= 0.95 ~ "soft_core",
+    freq >= 0.15 ~ "shell",
+    TRUE ~ "cloud"
+  ))
+table(TF_roary$category)
+ggplot(TF_roary, aes(x=`No. isolates`, fill=category)) +
+  geom_density(linewidth = 0.2) +
+  theme_bw() +
+  scale_fill_brewer(palette = "Set3") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+# ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/TF_density.pdf",width = 6,height = 4)
+
+colnames(roary_hvkp4)[27] <- "Gene"
+other_roary <- anti_join(roary_hvkp4,TF, by="Gene")
+other_roary$freq <- other_roary$`No. isolates`/2059
+other_roary <- other_roary %>%
+  mutate(category = case_when(
+    freq >= 0.99 ~ "core",
+    freq >= 0.95 ~ "soft_core",
+    freq >= 0.15 ~ "shell",
+    TRUE ~ "cloud"
+  ))
+
+df<-rbind(data.frame(cate = "TF",
+                         freq = TF_roary$freq),
+               data.frame(cate = "other_genes",
+                         freq = other_roary$freq))
+ggplot(df, aes(x=cate,y=freq,fill=cate)) +
+  geom_violin(color=NA,width=0.5) +
+  geom_boxplot(width = 0.1, outliers = F) +
+  theme_bw() +
+  scale_fill_brewer(palette = 1) +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  stat_compare_means(comparisons = list(c("TF", "other_genes")),
+                     label = "p.format", label.y = c(1.1)) 
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/TF_vs_othergene_freq.pdf",width = 3,height = 3.5)
+
+```
+
+## plot
+```{r}
+pie <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/summary_statistics.txt",sep="\t", header = F)
+pie$percent <- round(pie$V3 / sum(pie$V3) * 100, 2)
+
+library(ggplot2)
+library(ggrepel)
+ggplot(pie[-5,], aes(x = "", y = V3, fill = V1)) +
+  geom_bar(stat = "identity", width = 1, color = "white") + 
+  coord_polar(theta = "y") + 
+  theme_void() + 
+  labs(fill = "Gene Categories") + 
+  geom_text_repel(aes(label = paste0(V1, "\n", percent, "%")), 
+            position = position_stack(vjust = 0.5), size = 4,min.segment.length = 0) + 
+  scale_fill_brewer(palette = "Set3")
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/pan_genome_pie.pdf",width = 6,height = 5)
+
+# 
+# mydata = read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_new_genes.Rtab")
+# pdf("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/number_new_genes.pdf", width = 6, height = 4)
+# boxplot(mydata, data=mydata, main="Number of new genes",
+#          xlab="No. of genomes", ylab="No. of genes",varwidth=TRUE, ylim=c(0,max(mydata)), outline=FALSE)
+# dev.off()
+# 
+# mydata = read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_conserved_genes.Rtab")
+# png(filename = "number_of_conserved_genes.png", width = 6, height = 4, units = "in", res = 300)
+# boxplot(mydata, data=mydata, main="Number of conserved genes",
+#           xlab="No. of genomes", ylab="No. of genes",varwidth=TRUE, ylim=c(0,max(mydata)), outline=FALSE)
+# dev.off()
+#     
+# mydata = read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_genes_in_pan_genome.Rtab")
+# png(filename = "number_of_genes_in_pan.png", width = 6, height = 4, units = "in", res = 300)
+# boxplot(mydata, data=mydata, main="No. of genes in the pan-genome",
+#           xlab="No. of genomes", ylab="No. of genes",varwidth=TRUE, ylim=c(0,max(mydata)), outline=FALSE)
+# dev.off()
+# 
+# mydata = read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_unique_genes.Rtab")
+# png(filename = "number_of_unique_genes.png", width = 6, height = 4, units = "in", res = 300)
+# boxplot(mydata, data=mydata, main="Number of unique genes",
+#          xlab="No. of genomes", ylab="No. of genes",varwidth=TRUE, ylim=c(0,max(mydata)), outline=FALSE)
+# dev.off()
+# 
+# mydata = read.table("/Users/lubeifang/Desktop/Kleb_dap/files/blast_identity_frequency.Rtab")
+# png(filename = "blast_identify_frequency.png", width = 6, height = 4, units = "in", res = 300)
+# plot(mydata,main="Number of blastp hits with different percentage identity",  xlab="Blast percentage identity", ylab="No. blast results")
+# dev.off()
+
+conserved = colMeans(read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_conserved_genes.Rtab"))
+total = colMeans(read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_genes_in_pan_genome.Rtab"))
+
+genes = data.frame( genes_to_genomes = c(conserved,total),
+                    genomes = c(c(1:length(conserved)),c(1:length(conserved))),
+                    Key = c(rep("Conserved genes",length(conserved)), rep("Total genes",length(total))) )
+                    
+ggplot(data = genes, aes(x = genomes, y = genes_to_genomes, group = Key, linetype=Key)) +geom_line()+
+theme_classic() +
+ylim(c(1,max(total)))+
+xlim(c(1,length(total)))+
+xlab("No. of genomes") +
+ylab("No. of genes")+ theme_bw(base_size = 16) +  theme(legend.justification=c(0,1),legend.position=c(0,1))
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/conserved_vs_total_genes.pdf", scale=1)
+
+######################
+
+unique_genes = colMeans(read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_unique_genes.Rtab"))
+new_genes = colMeans(read.table("/Users/lubeifang/Desktop/Kleb_dap/files/number_of_new_genes.Rtab"))
+
+genes = data.frame( genes_to_genomes = c(unique_genes,new_genes),
+                    genomes = c(c(1:length(unique_genes)),c(1:length(unique_genes))),
+                    Key = c(rep("Unique genes",length(unique_genes)), rep("New genes",length(new_genes))) )
+                    
+ggplot(data = genes, aes(x = genomes, y = genes_to_genomes, group = Key, linetype=Key)) +geom_line()+
+theme_classic() +
+ylim(c(1,max(unique_genes)))+
+xlim(c(1,length(unique_genes)))+
+xlab("No. of genomes") +
+ylab("No. of genes")+ theme_bw(base_size = 16) +  theme(legend.justification=c(1,1),legend.position=c(1,1))
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/unique_vs_new_genes.pdf", scale=1)
+```
+
+## tree
+### accessory binary genes
+```{r}
+library(ggtree)
+library(ape)
+library(tidyverse)
+
+tree <- read.tree("/Users/lubeifang/Desktop/Kleb_dap/files/accessory_binary_genes.fa.newick")
+tree <- read.tree("/Users/lubeifang/Desktop/tree")
+
+annotations <- st[,c(2,10)]
+
+annotations <- annotations %>%
+  filter(strain %in% tree$tip.label)  # 只保留在树中的菌株
+tree$tip.label <- as.character(tree$tip.label)  # 确保树的叶节点是字符型
+
+# 将注释信息映射到树上
+tree_data <- as_tibble(tree) %>%
+  left_join(annotations, by = c("label" = "strain"))  # 按菌株名称匹配
+
+# 创建分组，按 ST 类型将菌株分组
+grouped_tree <- groupOTU(tree, split(annotations$strain, annotations$st))
+# 检查分组结果
+grouped_tree
+# 绘制树并为分支上色
+ggtree(grouped_tree, aes(color = group)) +
+  geom_tiplab() +  # 添加叶节点标签
+  theme_tree2() +  # 美化树形
+  ggtitle("Phylogenetic Tree with Branch Colored by ST Type")
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/core_binary_genes_tree_branch.pdf",width = 8,height = 10)
+```
+
+### core
+```{r}
+library(ggtree)
+library(ape)
+library(tidyverse)
+
+tree <- read.tree("/Users/lubeifang/Desktop/Kleb_dap/files/core_tree.newick")
+annotations <- st[,c(2,10)]
+
+annotations <- annotations %>%
+  filter(strain %in% tree$tip.label)  # 只保留在树中的菌株
+tree$tip.label <- as.character(tree$tip.label)  # 确保树的叶节点是字符型
+
+# 将注释信息映射到树上
+tree_data <- as_tibble(tree) %>%
+  left_join(annotations, by = c("label" = "strain"))  # 按菌株名称匹配
+
+ggtree(tree) %<+% annotations +  # 将注释数据映射到树上
+  geom_tiplab(aes(color = st), size = 3) +  # 根据 ST 上色，并标注叶节点
+  # scale_color_brewer(palette = "Set3") +   # 使用调色板
+  # theme_tree2() +                          # 美化树形
+  ggtitle("Phylogenetic Tree Colored by ST Type")  # 添加标题
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/accessory_binary_genes_tree.pdf",width = 8,height = 10)
+
+
+# 创建分组，按 ST 类型将菌株分组
+grouped_tree <- groupOTU(tree, split(annotations$strain, annotations$st))
+# 检查分组结果
+grouped_tree
+# 绘制树并为分支上色
+ggtree(grouped_tree, aes(color = group)) +
+  geom_tiplab() +  # 添加叶节点标签
+  theme_tree2() +  # 美化树形
+  ggtitle("Phylogenetic Tree with Branch Colored by ST Type")
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/accessory_binary_genes_tree_branch.pdf",width = 8,height = 10)
+```
 
 
 # SNP analysis
@@ -565,6 +808,48 @@ p2<-ggplot(temp2, aes(y=Freq, x=Var1))+
 
 p <- p1/p2
 ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/Counts_SNP2.pdf",p,width = 6,height = 7)
+```
+
+## compare SNP
+```{r}
+library(ggpubr)
+core_other <- anti_join(core,coretf, by="POS")
+core_other <- core_other[,c(2)]
+core_other$start <- core_other$POS -1
+core_other$chr <- "NZ_CP040539.1"
+core_other_anno <- read.csv("/Users/lubeifang/Desktop/annotated_positions.txt",sep="\t",header = F)
+core_other_anno <- core_other_anno[,c(3,7)]
+
+core_TF_anno <- coretf[,c(2,2072)]
+colnames(core_other_anno) <- colnames(core_TF_anno)
+
+gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/kleb_genename.csv")
+gene_anno$length <- gene_anno$End - gene_anno$Begin + 1
+gene_anno <- gene_anno[,c(2,3,13,14)]
+
+core_TF_snp <- data.frame(table(core_TF_anno$name))
+core_TF_snp <- merge(core_TF_snp,gene_anno, by.x="Var1",by.y="Locus.tag")
+core_TF_snp$density <- core_TF_snp$Freq / core_TF_snp$length
+
+core_other_snp <- data.frame(table(core_other_anno$name))
+core_other_snp <- merge(core_other_snp,gene_anno, by.x="Var1",by.y="Locus.tag")
+core_other_snp$density <- core_other_snp$Freq / core_other_snp$length
+
+df <- data.frame(
+  category = c(rep("TF_region",nrow(core_TF_snp)),rep("other_region",nrow(core_other_snp))),
+  density = c(core_TF_snp$density,core_other_snp$density)
+)
+ggplot(df, aes(x=category,y=density,fill=category)) +
+  geom_violin(color=NA,width=0.5) +
+  geom_boxplot(width = 0.1, outliers = F) +
+  theme_bw() +
+  scale_fill_brewer(palette = 1) +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  stat_compare_means(comparisons = list(c("TF_region", "other_region")),
+                     label = "p.format", label.y = c(0.3)) 
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure6/SNP_density_p.pdf",width = 2,height = 3)
 ```
 
 

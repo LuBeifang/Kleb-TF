@@ -23,7 +23,7 @@ getwd()
 kp_gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/hvkp4_geneanno0531.csv")
 
 # HKU57
-HKU57_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
+HKU57_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
 HKU57_annoData <- toGRanges(HKU57_txdb, feature="gene")
 
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_geneanno.gff",sep="\t",header=F)
@@ -42,7 +42,7 @@ colnames(HKU57_gene_anno) <- c("gene","productinhvkp4","Symbolinhvkp4","Locus.ta
 fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.fna"
 HKU57_stringset <- readDNAStringSet(fasta_file)
 
-MGH78578_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
+MGH78578_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
 MGH78578_annoData <- toGRanges(MGH78578_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_geneanno.gff",sep="\t",header=F)
 MGH78578_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -60,7 +60,7 @@ colnames(MGH78578_gene_anno) <- c("gene","productinhvkp4","Symbolinhvkp4","Locus
 fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.fna"
 MGH78578_stringset <- readDNAStringSet(fasta_file)
 
-SH12_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
+SH12_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
 SH12_annoData <- toGRanges(SH12_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_geneanno.gff",sep="\t",header=F)
 SH12_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -179,10 +179,10 @@ for (i in c("_A7","_D20","_F3","_G7","_R9","_P17","_Q15")){
     b <- get(paste0("HKU57",i))
     c <- get(paste0("MGH78578",i))
     d <- get(paste0("SH12",i))
-    x <- list(CR_HvKP4 = unique(a[a$singalValue > 1.87,]$Symbol),
-              HKU57 = unique(b[b$signalValue > 1.87,]$Symbolinhvkp4),
-              MGH78578 = unique(c[c$signalValue > 1.87,]$Symbolinhvkp4),
-              SH12 = unique(d[d$signalValue > 1.87,]$Symbolinhvkp4))
+    x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$Symbol),
+              HKU57 = unique(b[b$signalValue > 2.5,]$Symbolinhvkp4),
+              MGH78578 = unique(c[c$signalValue > 2.5,]$Symbolinhvkp4),
+              SH12 = unique(d[d$signalValue > 2.5,]$Symbolinhvkp4))
     p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
       scale_fill_gradient(low="white",high = "#C6AEBA") +
       theme(legend.position = "none")
@@ -193,8 +193,8 @@ for (i in c("_A7","_D20","_F3","_G7","_R9","_P17","_Q15")){
     if (i == "_G3" | i == "_P17") {
       a <- get(paste0("Kp",i))
       d <- get(paste0("SH12",i))
-      x <- list(CR_HvKP4 = unique(a[a$singalValue > 1.87,]$Symbol),
-                    SH12 = unique(d[d$signalValue > 1.87,]$Symbolinhvkp4))
+      x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$Symbol),
+                    SH12 = unique(d[d$signalValue > 2.5,]$Symbolinhvkp4))
       p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
         scale_fill_gradient(low="white",high = "#C6AEBA") +
         theme(legend.position = "none")
@@ -205,9 +205,9 @@ for (i in c("_A7","_D20","_F3","_G7","_R9","_P17","_Q15")){
       a <- get(paste0("Kp",i))
       b <- get(paste0("HKU57",i))
       d <- get(paste0("SH12",i))
-      x <- list(CR_HvKP4 = unique(a[a$singalValue > 1.87,]$Symbol),
-              HKU57 = unique(b[b$signalValue > 1.87,]$Symbolinhvkp4),
-              SH12 = unique(d[d$signalValue > 1.87,]$Symbolinhvkp4))
+      x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$Symbol),
+              HKU57 = unique(b[b$signalValue > 2.5,]$Symbolinhvkp4),
+              SH12 = unique(d[d$signalValue > 2.5,]$Symbolinhvkp4))
       p <- ggVennDiagram(x, label_alpha = 0, edge_size = 0.3, label = "count") +
         scale_fill_gradient(low="white",high = "#C6AEBA") +
         theme(legend.position = "none")
@@ -221,7 +221,7 @@ g <- arrangeGrob(grobs = plot_list, nrow=2)
 ggsave("/Users/lubeifang/Desktop/venn.pdf",g, width = 10, height = 8)
 ```
 
-
+### 3 TF example
 ```{r}
 overlap_coefficient <- function(set1, set2) {
   intersection <- length(intersect(set1, set2))  # 交集大小
@@ -234,10 +234,10 @@ a <- get(paste0("Kp",i))
 b <- get(paste0("HKU57",i))
 c <- get(paste0("MGH78578",i))
 d <- get(paste0("SH12",i))
-x <- list(CR_HvKP4 = unique(a[a$singalValue > 1.87,]$Symbol),
-          HKU57 = unique(b[b$signalValue > 1.87,]$Symbolinhvkp4),
-          MGH78578 = unique(c[c$signalValue > 1.87,]$Symbolinhvkp4),
-          SH12 = unique(d[d$signalValue > 1.87,]$Symbolinhvkp4))
+x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$Symbol),
+          HKU57 = unique(b[b$signalValue > 2.5,]$Symbolinhvkp4),
+          MGH78578 = unique(c[c$signalValue > 2.5,]$Symbolinhvkp4),
+          SH12 = unique(d[d$signalValue > 2.5,]$Symbolinhvkp4))
 
 overlap_matrix <- matrix(0, nrow = n, ncol = n, dimnames = list(names(x), names(x)))
 for (i in seq_along(x)) {
@@ -270,10 +270,10 @@ a <- get(paste0("Kp",i))
 b <- get(paste0("HKU57",i))
 c <- get(paste0("MGH78578",i))
 d <- get(paste0("SH12",i))
-x <- list(CR_HvKP4 = unique(a[a$singalValue > 1.87,]$Symbol),
-          HKU57 = unique(b[b$signalValue > 1.87,]$Symbolinhvkp4),
-          MGH78578 = unique(c[c$signalValue > 1.87,]$Symbolinhvkp4),
-          SH12 = unique(d[d$signalValue > 1.87,]$Symbolinhvkp4))
+x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$Symbol),
+          HKU57 = unique(b[b$signalValue > 2.5,]$Symbolinhvkp4),
+          MGH78578 = unique(c[c$signalValue > 2.5,]$Symbolinhvkp4),
+          SH12 = unique(d[d$signalValue > 2.5,]$Symbolinhvkp4))
 
 overlap_matrix <- matrix(0, nrow = n, ncol = n, dimnames = list(names(x), names(x)))
 for (i in seq_along(x)) {
@@ -310,9 +310,9 @@ i = "_Q15"
 a <- get(paste0("Kp",i))
 b <- get(paste0("HKU57",i))
 d <- get(paste0("SH12",i))
-x <- list(CR_HvKP4 = unique(a[a$singalValue > 1.87,]$Symbol),
-          HKU57 = unique(b[b$signalValue > 1.87,]$Symbolinhvkp4),
-          SH12 = unique(d[d$signalValue > 1.87,]$Symbolinhvkp4))
+x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$Symbol),
+          HKU57 = unique(b[b$signalValue > 2.5,]$Symbolinhvkp4),
+          SH12 = unique(d[d$signalValue > 2.5,]$Symbolinhvkp4))
 
 overlap_matrix <- matrix(0, nrow = 3, ncol = 3, dimnames = list(names(x), names(x)))
 for (i in seq_along(x)) {
@@ -347,6 +347,173 @@ dev.off()
 ```
 
 
+### 3TF GO
+```{r}
+gene2go <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/gene2go.csv")
+go2term <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/go2term.csv")
+
+convert_to_decimal <- function(fraction) {
+  parts <- strsplit(fraction, "/")[[1]]
+  numerator <- as.numeric(parts[1])
+  denominator <- as.numeric(parts[2])
+  return (numerator / denominator)
+}
+
+i = "_A7"
+a <- get(paste0("Kp",i))
+b <- get(paste0("HKU57",i))
+c <- get(paste0("MGH78578",i))
+d <- get(paste0("SH12",i))
+x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$feature),
+          HKU57 = unique(b[b$signalValue > 2.5,]$Locus.taginhvkp4),
+          MGH78578 = unique(c[c$signalValue > 2.5,]$Locus.taginhvkp4),
+          SH12 = unique(d[d$signalValue > 2.5,]$Locus.taginhvkp4))
+same <- Reduce(intersect, x)
+unique_CR_HvKP4 <- setdiff(x$CR_HvKP4, union(x$HKU57, union(x$MGH78578, x$SH12)))
+unique_HKU57 <- setdiff(x$HKU57, union(x$CR_HvKP4, union(x$MGH78578, x$SH12)))
+unique_MGH78578 <- setdiff(x$MGH78578, union(x$CR_HvKP4, union(x$HKU57, x$SH12)))
+unique_SH12 <- setdiff(x$SH12, union(x$CR_HvKP4, union(x$HKU57, x$MGH78578)))
+gene <- rbind(data.frame(name = "same", gene = same),
+                   data.frame(name = "unique_CR_HvKP4", gene = unique_CR_HvKP4),
+                   data.frame(name = "unique_HKU57", gene = unique_HKU57),
+                   data.frame(name = "unique_MGH78578", gene = unique_MGH78578),
+                   data.frame(name = "unique_SH12", gene = unique_SH12))
+write.csv(gene,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/TF_A7_gene.csv",row.names = F)
+
+df <- data.frame()
+for (i in c("same",'unique_CR_HvKP4','unique_HKU57','unique_MGH78578','unique_SH12')){
+  print(i)
+  name <- i
+  gene <- get(i)
+  GO <- enricher(gene,
+                 TERM2GENE = gene2go[,c(2,1)],
+                 TERM2NAME = go2term,
+                 qvalueCutoff = 0.01)
+  
+  if (is.null(GO)){
+    next
+  } 
+  temp <- as.data.frame(GO@result)
+  temp <- temp[temp$pvalue < 0.01,]
+  temp <- temp[order(temp$pvalue,decreasing = F),][1:5,]
+  df <- rbind(df, data.frame(name = name, temp))
+}
+
+df$GeneRatio <- sapply(df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#98B85D","#AC667E","#B395BD","#287c9e","#a9a9a9","#e29578"))
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/evoRS00760_GO.pdf",width = 6,height=4)
+
+i = "_F3"
+a <- get(paste0("Kp",i))
+b <- get(paste0("HKU57",i))
+c <- get(paste0("MGH78578",i))
+d <- get(paste0("SH12",i))
+x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$feature),
+          HKU57 = unique(b[b$signalValue > 2.5,]$Locus.taginhvkp4),
+          MGH78578 = unique(c[c$signalValue > 2.5,]$Locus.taginhvkp4),
+          SH12 = unique(d[d$signalValue > 2.5,]$Locus.taginhvkp4))
+same <- Reduce(intersect, x)
+unique_CR_HvKP4 <- setdiff(x$CR_HvKP4, union(x$HKU57, union(x$MGH78578, x$SH12)))
+unique_HKU57 <- setdiff(x$HKU57, union(x$CR_HvKP4, union(x$MGH78578, x$SH12)))
+unique_MGH78578 <- setdiff(x$MGH78578, union(x$CR_HvKP4, union(x$HKU57, x$SH12)))
+unique_SH12 <- setdiff(x$SH12, union(x$CR_HvKP4, union(x$HKU57, x$MGH78578)))
+gene <- rbind(data.frame(name = "same", gene = same),
+                   data.frame(name = "unique_CR_HvKP4", gene = unique_CR_HvKP4),
+                   data.frame(name = "unique_HKU57", gene = unique_HKU57),
+                   data.frame(name = "unique_MGH78578", gene = unique_MGH78578),
+                   data.frame(name = "unique_SH12", gene = unique_SH12))
+write.csv(gene,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/TF_F3_gene.csv",row.names = F)
+
+df <- data.frame()
+for (i in c("same",'unique_CR_HvKP4','unique_HKU57','unique_MGH78578','unique_SH12')){
+  print(i)
+  name <- i
+  gene <- get(i)
+  GO <- enricher(gene,
+                 TERM2GENE = gene2go[,c(2,1)],
+                 TERM2NAME = go2term,
+                 qvalueCutoff = 0.01)
+  
+  if (is.null(GO)){
+    next
+  } 
+  temp <- as.data.frame(GO@result)
+  temp <- temp[temp$pvalue < 0.01,]
+  temp <- temp[order(temp$pvalue,decreasing = F),][1:5,]
+  df <- rbind(df, data.frame(name = name, temp))
+}
+
+df$GeneRatio <- sapply(df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#98B85D","#B395BD","#287c9e","#a9a9a9","#e29578"))
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/evoRS12175_GO.pdf",width = 6,height=4)
+
+i = "_Q15"
+a <- get(paste0("Kp",i))
+b <- get(paste0("HKU57",i))
+# c <- get(paste0("MGH78578",i))
+d <- get(paste0("SH12",i))
+x <- list(CR_HvKP4 = unique(a[a$singalValue > 2.5,]$feature),
+          HKU57 = unique(b[b$signalValue > 2.5,]$Locus.taginhvkp4),
+          MGH78578 = NA,
+          SH12 = unique(d[d$signalValue > 2.5,]$Locus.taginhvkp4))
+same <- Reduce(intersect, x)
+unique_CR_HvKP4 <- setdiff(x$CR_HvKP4, union(x$HKU57, union(x$MGH78578, x$SH12)))
+unique_HKU57 <- setdiff(x$HKU57, union(x$CR_HvKP4, union(x$MGH78578, x$SH12)))
+unique_MGH78578 <- setdiff(x$MGH78578, union(x$CR_HvKP4, union(x$HKU57, x$SH12)))
+unique_SH12 <- setdiff(x$SH12, union(x$CR_HvKP4, union(x$HKU57, x$MGH78578)))
+gene <- rbind(data.frame(name = "same", gene = same),
+                   data.frame(name = "unique_CR_HvKP4", gene = unique_CR_HvKP4),
+                   data.frame(name = "unique_HKU57", gene = unique_HKU57),
+                   data.frame(name = "unique_SH12", gene = unique_SH12))
+write.csv(gene,"/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/TF_Q15_gene.csv",row.names = F)
+df <- data.frame()
+for (i in c("same",'unique_CR_HvKP4','unique_HKU57','unique_MGH78578','unique_SH12')){
+  print(i)
+  name <- i
+  gene <- get(i)
+  GO <- enricher(gene,
+                 TERM2GENE = gene2go[,c(2,1)],
+                 TERM2NAME = go2term,
+                 qvalueCutoff = 0.01)
+  
+  if (is.null(GO)){
+    next
+  } 
+  temp <- as.data.frame(GO@result)
+  temp <- temp[temp$pvalue < 0.01,]
+  temp <- temp[order(temp$pvalue,decreasing = F),][1:5,]
+  df <- rbind(df, data.frame(name = name, temp))
+}
+
+df$GeneRatio <- sapply(df$GeneRatio , convert_to_decimal)
+# plot bubble GO
+ggplot(df, aes(x=Count, y=log10(pvalue), size = GeneRatio, color = name)) +
+  geom_point(alpha=0.5) +
+  scale_size(range = c(10, 20)) +
+  theme_classic() +
+  theme(legend.position = "right") +
+  geom_text_repel(aes(label = Description), size = 2, vjust = 0,max.overlaps = 100) + 
+  scale_color_manual(values = c("#AC667E","#B395BD","#a9a9a9"))
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure7/evoRS18490_GO.pdf",width = 6,height=4)
+
+```
 
 
 
@@ -376,7 +543,7 @@ getwd()
 ############Kleb hvkp4###############
 ########come on PEAKS!!!###########
 # load annotation
-HKU57_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
+HKU57_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
 HKU57_annoData <- toGRanges(HKU57_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_geneanno.gff",sep="\t",header=F)
 HKU57_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -386,7 +553,7 @@ HKU57_gene_anno$Symbolinhvkp4 <- sub("Name=", "", HKU57_gene_anno$Symbolinhvkp4)
 fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.fna"
 HKU57_stringset <- readDNAStringSet(fasta_file)
 
-MGH78578_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
+MGH78578_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
 MGH78578_annoData <- toGRanges(MGH78578_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_geneanno.gff",sep="\t",header=F)
 MGH78578_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -396,7 +563,7 @@ MGH78578_gene_anno$Symbolinhvkp4 <- sub("Name=", "", MGH78578_gene_anno$Symbolin
 fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.fna"
 MGH78578_stringset <- readDNAStringSet(fasta_file)
 
-SH12_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
+SH12_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
 SH12_annoData <- toGRanges(SH12_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_geneanno.gff",sep="\t",header=F)
 SH12_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -604,7 +771,7 @@ getwd()
 ############Kleb hvkp4###############
 ########come on PEAKS!!!###########
 # load annotation
-HKU57_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
+HKU57_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.gff")
 HKU57_annoData <- toGRanges(HKU57_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_geneanno.gff",sep="\t",header=F)
 HKU57_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -614,7 +781,7 @@ HKU57_gene_anno$Symbolinhvkp4 <- sub("Name=", "", HKU57_gene_anno$Symbolinhvkp4)
 fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/HKU57_meme.fna"
 HKU57_stringset <- readDNAStringSet(fasta_file)
 
-MGH78578_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
+MGH78578_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.gff")
 MGH78578_annoData <- toGRanges(MGH78578_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_geneanno.gff",sep="\t",header=F)
 MGH78578_gene_anno <- gene_anno[gene_anno$V3 == "gene",]
@@ -624,7 +791,7 @@ MGH78578_gene_anno$Symbolinhvkp4 <- sub("Name=", "", MGH78578_gene_anno$Symbolin
 fasta_file <- "/Users/lubeifang/Desktop/Kleb_dap/ref/MGH78578_meme.fna"
 MGH78578_stringset <- readDNAStringSet(fasta_file)
 
-SH12_txdb <- makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
+SH12_txdb <- txdbmaker::makeTxDbFromGFF("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_meme.gff")
 SH12_annoData <- toGRanges(SH12_txdb, feature="gene")
 gene_anno <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/ref/SH12_geneanno.gff",sep="\t",header=F)
 SH12_gene_anno <- gene_anno[gene_anno$V3 == "gene",]

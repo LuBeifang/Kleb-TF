@@ -119,6 +119,59 @@ p <- p1/p3
 ```
 
 
+# Expression of TFs in different layers
+```{r}
+tpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
+tbm <- ana[,c(28,32)]
+exp <- merge(tbm,tpm,by.x="shared.name",by.y="X")
+
+# long dataframe
+library(reshape2)
+exp_wide <- melt(exp, idvar = c("shared.name","type"), direction = "wide")
+
+ggplot(exp_wide, aes(x=type,y=log2(value),fill=type) )+
+  facet_wrap(.~variable,ncol=4) +
+  geom_boxplot(outliers = F) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  xlab("") +
+  ylab("log2 (TPM)") +
+  scale_fill_manual(values = c("#7a9065","#aab982","#f2fac4")) +
+  geom_jitter(width = 0.2, alpha = 0.5, color = "grey") +
+  stat_compare_means(comparisons = list(c("top", "middle"), c("top", "bottom"), c("middle", "bottom")),
+                     label = "p.format", label.y = c(11, 13, 15)) +
+  ylim(0,17)
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/TBM_TFexp_box.pdf",width = 10,height = 2.5)
+
+exp_tf <- exp
+colnames(exp_tf)[1] <- "X"
+colnames(exp_wide)[1] <- "X"
+exp_gene <- anti_join(tpm,exp_tf,by="X")
+
+exp_gene_wide <- melt(exp_gene, idvar = c("X"), direction = "wide")
+wide <- rbind(data.frame(gene = "TF",as.data.frame(exp_wide[,c(1,3,4)])),
+                   data.frame(gene = "other_gene",as.data.frame(exp_gene_wide)))
+ggplot(wide, aes(x=gene,y=log2(value),fill=gene) )+
+  facet_wrap(.~variable,ncol=4) +
+  geom_boxplot(outliers = F) +
+  theme_light() +
+  theme(panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        legend.position = "none") +
+  xlab("") +
+  ylab("log2 (TPM)") +
+  scale_fill_manual(values = c("#f2fac4","grey")) +
+  # geom_jitter(width = 0.2, alpha = 0.5, color = "grey") +
+  stat_compare_means(comparisons = list(c("TF", "other_gene")),
+                     label = "p.format", label.y = c(13)) +
+  ylim(0,15)
+
+ggsave("/Users/lubeifang/Desktop/Kleb_dap/Figure/Figure4/exp_box.pdf",width = 6,height = 2.5)
+```
+
 # Compare with PA PS
 ```{r}
 library(dplyr)

@@ -746,6 +746,23 @@ library(dplyr)
 TF_pfam <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/klebTF_pfam.csv")
 tpm <- read.csv("/Users/lubeifang/Desktop/Kleb_dap/files/timepoint_tpm.csv")
 TF_tpm <- merge(tpm,TF_pfam,by.x="X",by.y="Gene")
+gene_tpm <- anti_join(tpm,TF_tpm,by="X")
+
+df <- rbind (data.frame(cate = "TF", num = TF_tpm$TP24),
+             data.frame(cate = "other_gene", num = gene_tpm$TP24))
+ggplot(df,aes(x=cate,y=log10(num),fill=cate)) +
+  geom_violin(color=NA,width=0.5) +
+  geom_boxplot(width = 0.1, outliers = F, color = "#76608A") +
+  coord_flip() +
+  theme_bw() +
+  scale_fill_brewer(palette = 1) +
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+# ggsave("/Users/lubeifang/Desktop/violin.pdf",width = 4, height = 6)
+
+
 
 TF_tpm <- TF_tpm[,c(1:5,7,21)]
 change.df <- data.frame(Gene = TF_tpm$X, 
