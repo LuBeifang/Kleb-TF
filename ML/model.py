@@ -5,8 +5,6 @@ from typing import Optional, Tuple
 class ProteinTFProjection(nn.Module):
     """
     Transformer-based projection head for ESM2 protein embeddings.
-    Input : (B, L_p=1024, 320)   → ESM2 per-residue embeddings
-    Output: (B, L_p=1024, 512)   → ready for cross-attention with DNA (B, 201, 512)
     """
     def __init__(
         self,
@@ -21,9 +19,6 @@ class ProteinTFProjection(nn.Module):
         
         self.input_proj = nn.Linear(input_dim, output_dim)   # 320 → 512
         self.norm_in = nn.LayerNorm(output_dim)
-
-        # Learnable residue-type positional encoding (since ESM2 already has structure info)
-        #self.pos_encoding = nn.Parameter(torch.zeros(1, 1024, output_dim))
         
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=output_dim,
@@ -39,19 +34,18 @@ class ProteinTFProjection(nn.Module):
         self.final_norm = nn.LayerNorm(output_dim)
 
     def forward(self, protein_emb: torch.Tensor) -> torch.Tensor:
-        """
-        protein_emb: (B, 1024, 320)
-        returns    : (B, 1024, 512)
-        """
-        x = self.input_proj(protein_emb)          # (B, 1024, 512)
+        x = self.input_proj(protein_emb)          
         x = self.norm_in(x)
-        x = self.transformer(x)                   # self-attention over 1024 residues
+        x = self.transformer(x)                   
         x = self.final_norm(x)
         
         return x
 
 
 class CrossAttentionLayer(nn.Module):
+    """
+    corss attention layer
+    """
     def __init__(self, d_model: int, nhead: int, dim_feedforward: int, dropout: float):
         super().__init__()
         self.attn = nn.MultiheadAttention(
@@ -69,10 +63,10 @@ class CrossAttentionLayer(nn.Module):
 
     def forward(
         self,
-        query: torch.Tensor,              # [B, Tq, D]
-        key_value: torch.Tensor,          # [B, Tk, D]
-        attn_mask: Optional[torch.Tensor] = None,         # [Tq, Tk] or [B*nhead, Tq, Tk]
-        key_padding_mask: Optional[torch.Tensor] = None,  # [B, Tk] (True for padding)
+        query: torch.Tensor,              
+        key_value: torch.Tensor,          
+        attn_mask: Optional[torch.Tensor] = None,        
+        key_padding_mask: Optional[torch.Tensor] = None,  
         need_weights: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         attn_out, attn_w = self.attn(
@@ -85,6 +79,8 @@ class CrossAttentionLayer(nn.Module):
         ffn_out = self.ffn(x)
         x = self.norm2(x + self.dropout(ffn_out))
         return (x, attn_w) if need_weights else (x, None)
+    
+    
 class AttentivePoolWithScores(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -92,33 +88,32 @@ class AttentivePoolWithScores(nn.Module):
 
     def forward(self, x):
         # x: (B, L, D)
-        raw_scores = self.score(x).squeeze(-1)      # (B, L)    未归一化分数
-        weights = torch.softmax(raw_scores, dim=-1) # (B, L)    注意力权重
+        raw_scores = self.score(x).squeeze(-1)      
+        weights = torch.softmax(raw_scores, dim=-1) 
 
-        pooled = torch.bmm(weights.unsqueeze(1), x).squeeze(1)  # (B, D)
+        pooled = torch.bmm(weights.unsqueeze(1), x).squeeze(1) 
 
-        return pooled, raw_scores, weights   # (B, D), (B, L), (B, L)
-
+        return pooled, raw_scores, weights   
 
 class AttachedModel(nn.Module):
     """
-    Improved Protein-DNA interaction model with bidirectional cross-attention using full transformer-like layers (attention + FFN + norms).
+    Improved Protein-DNA interaction model with bidirectional cross-attention.
     """
     def __init__(
         self,
         tf_input_dim: int = 320,
-        peak_input_dim: int = 5,  # For one-hot
+        peak_input_dim: int = 5,
         d_model: int = 512,
         dna_encoding_method: str = "onehot",
         nhead: int = 8,
         num_encoder_layers: int = 6,
         dim_feedforward: int = 512,
         protein_length: int = 903,
-        dna_max_length: int = 40 #kmer 40x6mer
-        #dropout: float = 0.1 var for each block
+        dna_max_length: int = 40, #Nucleotide transformer embedding length
+        dropout: float = 0.1
     ):
         super().__init__()
-        if dna_encoding_method == "onehot":  # Focused on onehot for this improvement
+        if dna_encoding_method == "onehot": 
             self.dna_encoding_method='onehot'
             self.peak_input_dim = 5
         else:
@@ -164,29 +159,19 @@ class AttachedModel(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_encoder_layers)
 
-
-        # #bidirectional LSTM for DNA feature concentraion
-        self.lstm_dna = nn.LSTM(
-            input_size=512,
-            hidden_size=256,
-            num_layers=2,
-            batch_first=True,     # (B, T, D)
-            bidirectional=True,
-            dropout=0.2
-        )
         # Bidirectional cross-attention with full layers
         
         self.cross_layer_tf = CrossAttentionLayer(d_model, nhead, dim_feedforward, 0.4) #
         self.cross_layer_dna = CrossAttentionLayer(d_model, nhead, dim_feedforward, 0.4)
-
+        
         self.pool=AttentivePoolWithScores(self.d_model)
 
         # Classifier: Simplified, with pooled DNA input
         self.classifier = nn.Sequential(
-            nn.Linear(self.dna_max_length + self.protein_length, 256),  # TF + DNA avg + DNA max
+            nn.Linear(self.dna_max_length + self.protein_length, 256), 
             nn.ReLU(),
             nn.Dropout(0.2),
-            nn.Linear(256, 128),  # TF + DNA avg + DNA max
+            nn.Linear(256, 128),  
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(128, 64),
@@ -197,30 +182,18 @@ class AttachedModel(nn.Module):
 
     def encode_dna(self, peak_embeddings: torch.Tensor) -> torch.Tensor:
         """
-        Returns DNA tokens as (B, L', D); L=220 -> L' ~28 after downsampling.
-        Args:
-            peak_embeddings: Tensor of shape (B, L, 5) for one-hot or (B, L', D) for embeddings.
+        depends on the dna embedding methods
         """
-        # Case 1: one-hot DNA, shape (B, L, 5)
         if peak_embeddings.dim() == 3 and peak_embeddings.size(-1) == 5:
-            # (B, L, 5) -> (B, 5, L)
             x = peak_embeddings.transpose(1, 2)
-            # (B, 5, L) -> (B, D, L')
             x = self.dna_conv(x)
-            # (B, D, L') -> (B, L', D)
             x = x.transpose(1, 2)
             return x
-        # Case 2: already embedded, e.g., (B, L', D)
         else:
-            # # (B, L'), 直接投影到 (B, L', D)，假设L'=512
-            # # 你可以用一个Linear层或者expand
-            # x = peak_embeddings.unsqueeze(-1)  # (B, L', 1)
-            # x = x.expand(-1, -1, self.d_model) # (B, L', D)
             return peak_embeddings
-        # else:
-        #     raise ValueError(f"Unexpected peak_embeddings shape: {peak_embeddings.shape}")
+
     def forward(self, tf_embeddings: torch.Tensor, peak_embeddings: torch.Tensor, sigmoid: bool = True):
-        #B = tf_embeddings.size(0)
+       
 
         # TF token
         tf_tok = self.tf_proj(tf_embeddings)
@@ -230,23 +203,20 @@ class AttachedModel(nn.Module):
         elif self.dna_encoding_method=='transformer':
             dna_tok = self.encode_dna(peak_embeddings) 
 
-
-        #dna_tok_lstm,_=self.lstm_dna(dna_tok)
-        # # Bidirectional cross-attention with full layers
-        tf_att, _   = self.cross_layer_tf(tf_tok, dna_tok)      # TF attends to DNA → (B, 1024, 512)
-        dna_att, _  = self.cross_layer_dna(dna_tok, tf_tok)     # DNA attends to TF → (B, 201, 512)
+        tf_att, _   = self.cross_layer_tf(tf_tok, dna_tok)     
+        dna_att, _  = self.cross_layer_dna(dna_tok, tf_tok)     
 
         
 
         # Concatenate along sequence dimension
-        seq = torch.cat([tf_att, dna_att], dim=1)   # → (B, 1024 + 201 = 1225, 512)
+        seq = torch.cat([tf_att, dna_att], dim=1) 
 
         
         # Joint self-attention over BOTH protein and DNA residues
-        enc = self.encoder(seq)                                # → (B, 1225, 320)
-        enc_pooled,enc_score,enc_weigths = self.pool(enc)   #weight out put B L
+        enc = self.encoder(seq)                                
+        enc_mean = enc.mean(dim=-1)     
         # Classifier with proper dimension
-        logits = self.classifier(enc_weigths).squeeze(-1)   # (B,)
+        logits = self.classifier(enc_mean).squeeze(-1)   # (B,)
 
         if sigmoid:
             return torch.sigmoid(logits)
