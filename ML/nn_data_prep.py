@@ -1,14 +1,12 @@
 
-from random import random,sample,shuffle
+from random import sample,shuffle
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 import pyfastx
 from tqdm.auto import tqdm
-import glob
 import pyfastx
-import os
 
 
 seed = 42
@@ -24,19 +22,6 @@ def peak_fa_path_parser(p):
 def partial_shuffle(seq: str, shuffle_frac: float) -> str:
     """
     Partially shuffle a DNA sequence.
-
-    Parameters
-    ----------
-    seq : str
-        Input DNA sequence (e.g. 'ACGT...').
-    shuffle_frac : float
-        Fraction of positions to be shuffled in-place (0.0 ~ 1.0).
-        - 0.0  -> no change
-        - 0.2  -> roughly 20% of positions will be permuted among themselves
-        - 1.0  -> full shuffle of all positions
-
-    Returns
-    -------
     shuffled_seq : str
         Sequence of same length where only a subset of positions
         have been randomly permuted.
@@ -64,9 +49,7 @@ def partial_shuffle(seq: str, shuffle_frac: float) -> str:
 
 class TFDataset(Dataset):
     def __init__(self, tf_fasta_paths, peak_fasta_paths, binding_peaks_csv, all_peaks_csv, whole_genome_fa_path, gff_path, neg_sampling_rate=1, ifshuffle_neg=False,shuffle_fraction=0.4):
-        # tf_fasta_paths is the path for DNA sequences of all TFs, each TF is a file
-        # peak_fasta_paths is the path for DNA sequences of all binding peaks, each TF has a file containing multiple binding regions
-        # binding_peaks_csv is a csv file containing the binding information of all TFs, each row is a binding region
+
         self.neg_sampling_rate = neg_sampling_rate
         self.binding_peaks_df = self._read_binding_csv(binding_peaks_csv)
         self.all_binding_peaks_df = self._read_binding_csv(all_peaks_csv)
@@ -112,7 +95,7 @@ class TFDataset(Dataset):
     
     def _get_neg_peak_seqs_whole(self, tf_fasta_paths, whole_genome_path,binding_peaks_csv, all_peaks_csv):
         """generate negative samples, excluding all binding sites"""
-        # df = pd.read_csv(binding_peaks_csv, sep=',', header=None, index_col=False, usecols=[0, 2, 3, 8], names=['tf_name', 'binding_start', 'binding_end', 'binding_fc'])
+        
 
         df_all = pd.read_csv(all_peaks_csv, sep=',', header=None, index_col=False, usecols=[0, 2, 3, 8], names=['tf_name', 'binding_start', 'binding_end', 'binding_fc'])
 
@@ -426,7 +409,6 @@ class TFDataset(Dataset):
 
     def __len__(self):
         pos_len = len(self.binding_peaks_df)
-        #neg_len = int(self.neg_sampling_rate *3* pos_len)
         neg_len = int(self.neg_sampling_rate * pos_len)
         return pos_len + neg_len
 
@@ -450,12 +432,3 @@ class TFDataset(Dataset):
             label = 0
         return tf_name, tf_seq, peak_seq, peak_fc, torch.tensor(label, dtype=torch.float32)
 
-# if __name__ == '__main__':
-#     tf_fasta_paths = glob.glob('/home/dylan/data/ml/PACHIP/trykleb/kp3/data/input/TF_fasta/*.fa')
-#     tf_fasta_paths = [p for p in tf_fasta_paths if ':' not in p]
-#     peak_fasta_paths = glob.glob('/home/dylan/data/ml/PACHIP/trykleb/kp3/data/input/peak_fasta_201bp_p3n30/*.fasta')
-#     dataset = TFDataset(tf_fasta_paths, peak_fasta_paths, '/home/dylan/data/ml/PACHIP/trykleb/kp3/data/input/allpeak_p3n30.csv',
-#                         '/home/dylan/data/ml/PACHIP/trykleb/kp3/data/input/allpeak_27TF.csv', '/home/dylan/data/ml/PACHIP/trykleb/kp3/data/hvkp4.fasta','/home/dylan/data/ml/PACHIP/trykleb/kp3/pred/HKU57.gff')
-      
-#     print(dataset[1])
-#     print('done')

@@ -1,16 +1,12 @@
 import os
 import numpy as np
 import pandas as pd
-from transformers import AutoTokenizer, AutoModel, EsmModel, EsmTokenizer
 import torch
-import glob
 from tqdm.auto import tqdm
 from torchmetrics.classification import BinaryAccuracy
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
-from scipy.stats import pearsonr
-from nn_data_prep import TFDataset
-from model import AttachedModel,create_attached_model
+from model import create_attached_model
 from captum.attr import InputXGradient 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

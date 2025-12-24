@@ -5,14 +5,9 @@ import pyfastx
 import os
 import numpy as np
 import pandas as pd
-from transformers import AutoTokenizer, AutoModel, EsmModel, EsmTokenizer
 import torch
 from tqdm.auto import tqdm
-from torchmetrics.classification import BinaryAccuracy
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import average_precision_score
-from scipy.stats import pearsonr
-from model import AttachedModel,create_attached_model
+from model import create_attached_model
 import argparse
 
 
