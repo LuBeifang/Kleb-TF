@@ -30,21 +30,19 @@ The install time should be around 30 mins.
         pip install -r code0915/requirements.txt
 
 ### KP-GRN predict
-        usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-o OUTPUT] [-device DEVICE] [--motif]
-        
-        Predict TF and DNA binding
-        
-        optional arguments:
-          -h, --help            show this help message and exit
-          -tf INPUT_TF_FASTA, --input_tf_fasta INPUT_TF_FASTA
-                                Directory path of input TF fasta file
-          -g GENOME, --genome GENOME
-                                Directory path of input KP isolates genome fasta file
-          -gff GFF              Directory path of input KP isolates gene annotation gff file
-          -o OUTPUT, --output OUTPUT
-                                Output csv path
-          -device DEVICE        Device name: cuda or cpu
-          --motif               Run motif at the same time
+        usage: predict_pro_permu.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
 
+        Predict TF and DNA binding
+
+        options:
+        -h, --help            show this help message and exit
+        -tf, --input_tf_fasta INPUT_TF_FASTA
+                                Directory path of input TF fasta file
+        -g, --genome GENOME   Directory path of input KP isolates genome fasta file
+        -gff GFF              Directory path of input KP isolates gene annotation gff file
+        -model MODEL          Path to the model file
+        -t, --threshold THRESHOLD
+                                Prediction threshold
+        -o, --output OUTPUT   Output directory path
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
