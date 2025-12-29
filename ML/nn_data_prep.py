@@ -347,12 +347,6 @@ class TFDataset(Dataset):
             'peak_seq': all_peak_seqs,
             'peak_fc': np.zeros(len(all_peak_seqs))
         })
-        
-        # # Optional: Limit the number of negatives per TF if needed
-        # if hasattr(self, 'max_negatives_per_tf') and self.max_negatives_per_tf:
-        #     print(f"Limiting to {self.max_negatives_per_tf} negatives per TF")
-        #     neg_peak_df = neg_peak_df.groupby('tf_name').head(self.max_negatives_per_tf).reset_index(drop=True)
-        
         return neg_peak_df
 
     def _dna_permutations(self, peak_fasta_paths, binding_peaks_csv):
