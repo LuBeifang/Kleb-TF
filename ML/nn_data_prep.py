@@ -48,12 +48,13 @@ def partial_shuffle(seq: str, shuffle_frac: float) -> str:
     return ''.join(seq_list)
 
 class TFDataset(Dataset):
-    def __init__(self, tf_fasta_paths, peak_fasta_paths, binding_peaks_csv, all_peaks_csv, whole_genome_fa_path, gff_path, neg_sampling_rate=1, ifshuffle_neg=False,shuffle_fraction=0.4):
-
+    def __init__(self, tf_fasta_paths, peak_fasta_paths, binding_peaks_csv, all_peaks_csv, whole_genome_fa_path, gff_path, neg_sampling_rate=1, ifshuffle_neg=False,peakshuffle=False,shuffle_fraction=0.4,random_seed=42):
         self.neg_sampling_rate = neg_sampling_rate
         self.binding_peaks_df = self._read_binding_csv(binding_peaks_csv)
         self.all_binding_peaks_df = self._read_binding_csv(all_peaks_csv)
         self.shuffle_fraction=shuffle_fraction
+        self.random_seed=random_seed
+        self.peakshuffle=peakshuffle
         print('Finish reading binding peaks csv')
 
         self.tss_positions = self._read_tss(gff_path)
@@ -68,11 +69,25 @@ class TFDataset(Dataset):
         print('Finish reading positive peak sequences')
 
         if ifshuffle_neg:
+            total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)).astype(int)
             tmp_neg = [
             self._dna_permutations(peak_fasta_paths, binding_peaks_csv) for _ in range(neg_sampling_rate)
             ]
-            neg_peak_seqs = pd.concat(tmp_neg, ignore_index=True)
+            tmp_neg=pd.concat(tmp_neg, ignore_index=True)
+            neg_peak_seqs = pd.concat([tmp_neg.sample(n=total_neg,random_state=self.random_seed)], ignore_index=True)
             self.neg_peak_with_seqs_df = pd.merge(tf_seqs_df, neg_peak_seqs, on='tf_name', validate='one_to_many')
+
+        elif peakshuffle and ifshuffle_neg:
+            total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/2).astype(int)
+            tmp_neg = [
+            self._dna_permutations(peak_fasta_paths, binding_peaks_csv) for _ in range(neg_sampling_rate)
+            ]
+            tmp_neg=pd.concat(tmp_neg, ignore_index=True)
+            shuffled_neg_peak_seqs= self._get_all_noverlap_neg_peak_seqs()
+            shuffled_neg_peak_seqs=shuffled_neg_peak_seqs.sample(n=total_neg,random_state=42)
+            neg_peak_seqs = pd.concat([tmp_neg.sample(n=total_neg,random_state=42),shuffled_neg_peak_seqs], ignore_index=True)
+            self.neg_peak_with_seqs_df = pd.merge(tf_seqs_df, neg_peak_seqs, on='tf_name', validate='one_to_many')
+
         else:
             neg_peak_seqs_tss = self._get_neg_peak_seqs_tss(tf_fasta_paths, whole_genome_fa_path, binding_peaks_csv, all_peaks_csv)
             neg_peak_seqs_all = self._get_neg_peak_seqs_whole(tf_fasta_paths, whole_genome_fa_path, binding_peaks_csv, all_peaks_csv)
@@ -94,9 +109,6 @@ class TFDataset(Dataset):
 
     
     def _get_neg_peak_seqs_whole(self, tf_fasta_paths, whole_genome_path,binding_peaks_csv, all_peaks_csv):
-        """generate negative samples, excluding all binding sites"""
-        
-
         df_all = pd.read_csv(all_peaks_csv, sep=',', header=None, index_col=False, usecols=[0, 2, 3, 8], names=['tf_name', 'binding_start', 'binding_end', 'binding_fc'])
 
         peak_seq_lengths = self.peak_with_seqs_df['peak_seq'].apply(len).values
@@ -356,7 +368,7 @@ class TFDataset(Dataset):
             current_tf_name = peak_fa_path_parser(p)
             fa = pyfastx.Fasta(p, build_index=False)
             seqs = [seq for name, seq in fa]
-            seqs = [partial_shuffle(seq, self.shuffle_fraction) for seq in seqs]
+            seqs = [partial_shuffle(seq, self.shuffle_fraction,self.random_seed) for seq in seqs]
             tf_df = df[df['tf_name'] == current_tf_name].reset_index(drop=True)
             assert len(seqs) == len(tf_df)
 
