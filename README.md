@@ -25,12 +25,12 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
 
 The install time should be around 30 mins.
 
-        conda create -n kleb-tf python=3.9 -y
+        conda create -n kleb-tf python=3.15 -y
         conda activate kleb-tf
-        pip install -r code0915/requirements.txt
+        pip install -r requirements.txt
 
 ### KP-GRN predict
-        usage: predict_pro_permu.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
+        usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
 
         Predict TF and DNA binding
 
@@ -44,5 +44,6 @@ The install time should be around 30 mins.
         -t, --threshold THRESHOLD
                                 Prediction threshold
         -o, --output OUTPUT   Output directory path
+**example:** python predict.py -tf example/RS00760.fasta -g example/hvkp4.gff -gff example/hvkp4.gff -model model.pt -t 0.95 -o result_file
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
