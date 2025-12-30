@@ -45,6 +45,8 @@ The install time should be around 30 mins.
                                 Prediction threshold
         -o, --output OUTPUT   Output directory path
 ## Example 
+
         python predict.py -tf example/RS00760.fasta -g example/hvkp4.gff -gff example/hvkp4.gff -model model.pt -t 0.95 -o result_file
+        
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
