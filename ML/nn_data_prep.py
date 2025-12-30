@@ -68,7 +68,7 @@ class TFDataset(Dataset):
         assert len(self.peak_with_seqs_df) == len(self.binding_peaks_df)
         print('Finish reading positive peak sequences')
 
-        if ifshuffle_neg:
+        if self.ifshuffle_neg and not self.peakshuffle:
             total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)).astype(int)
             tmp_neg = [
             self._dna_permutations(peak_fasta_paths, binding_peaks_csv) for _ in range(neg_sampling_rate)
@@ -77,7 +77,7 @@ class TFDataset(Dataset):
             neg_peak_seqs = pd.concat([tmp_neg.sample(n=total_neg,random_state=self.random_seed)], ignore_index=True)
             self.neg_peak_with_seqs_df = pd.merge(tf_seqs_df, neg_peak_seqs, on='tf_name', validate='one_to_many')
 
-        elif peakshuffle and ifshuffle_neg:
+        elif self.peakshuffle and self.ifshuffle_neg:
             total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/2).astype(int)
             tmp_neg = [
             self._dna_permutations(peak_fasta_paths, binding_peaks_csv) for _ in range(neg_sampling_rate)
