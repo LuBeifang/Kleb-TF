@@ -21,7 +21,7 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
 
 **Notes:** We highly recommend creating a separate conda environment to manage the following software tools.
 
-### Envs
+### Install
 
 The install time should be around 30 mins.
 
@@ -44,7 +44,7 @@ The install time should be around 30 mins.
         -t, --threshold THRESHOLD
                                 Prediction threshold
         -o, --output OUTPUT   Output directory path
-**Example:** 
+## Example 
         python predict.py -tf example/RS00760.fasta -g example/hvkp4.gff -gff example/hvkp4.gff -model model.pt -t 0.95 -o result_file
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
