@@ -420,3 +420,27 @@ class ModelWrapper:
         self.attached_model.load_state_dict(checkpoint['model_state_dict'])
         self.attached_model.eval()
 
+    @torch.no_grad()
+    def simple_predict(self,data_for_predict):
+        self.attached_model.eval()
+        preds_list = []
+        tf_seqs_list = []
+        peak_seqs_list = []
+        tf_name_list = []
+        
+        for batch in tqdm(data_for_predict, leave=True, position=0):
+            tf_name, tf_seqs, peak_seqs = batch
+            tf_name_list.extend(tf_name)
+            tf_seqs_list.extend(tf_seqs)
+            peak_seqs_list.extend(peak_seqs)
+
+            protein_sequences = self.convert_dna_to_protein_batch(tf_seqs)
+            
+            tf_embeddings = self.get_protein_embeddings(protein_sequences)
+
+            peak_embeddings = self.get_dna_embeddings(peak_seqs)
+
+            # Predictions
+            preds = self.attached_model(tf_embeddings, peak_embeddings)
+            preds_list.append(preds.squeeze().cpu().numpy())
+        return np.concatenate(preds_list)
