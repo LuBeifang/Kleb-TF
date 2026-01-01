@@ -11,7 +11,9 @@ This GitHub repository contains all the custom scripts and shell commands used i
 ## Data available
 All raw sequence files are uploaded to NCBI (GEO:[GSE306886](https:)).
 
-Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559).
+Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559
+        
+        ).
 
 If you have any further requests, please contact xindeng@cityu.edu.hk or beifanglu2-c@my.cityu.edu.hk. We are pleased to help!
 
@@ -25,10 +27,13 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
 
 The install time should be around 30 mins.
 
-        conda create -n kleb-tf python=3.15 -y
+        conda create -n kleb-tf python=3.11 -y
         conda activate kleb-tf
+        git clone https://github.com/LuBeifang/Kleb-TF/
+        cd Kleb-TF/GRN-predictor
         pip install -r requirements.txt
-
+        wget -c https://huggingface.co/LucileLu77/KP-GRM-predictor/resolve/main/best_model.pt
+        
 ### KP-GRN predict
         usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
 
@@ -44,9 +49,9 @@ The install time should be around 30 mins.
         -t, --threshold THRESHOLD
                                 Prediction threshold
         -o, --output OUTPUT   Output directory path
-## Example 
+### Example 
 
-        python predict.py -tf example/RS00760.fasta -g example/hvkp4.gff -gff example/hvkp4.gff -model model.pt -t 0.95 -o result_file
+        python predict.py -tf example/VmrR.fa -g example/SH12.fna -gff example/SH12.gff -model best_model.pt -t 0.95 -o result_file
         
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
