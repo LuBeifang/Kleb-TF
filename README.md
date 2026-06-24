@@ -2,16 +2,18 @@
 
 This GitHub repository contains all the custom scripts and shell commands used in our paper,
 
-**Global Transcription Factor Networks Reveal Conserved Gene Regulation and Key Virulence regulators in Klebsiella pneumoniae Pan-genome**.
+**Topology and Evolution of Global Transcriptional Regulatory Networks Across the Klebsiella pneumoniae Pan-Genome**.
 
 
 ## Graphic abstract
-![abstract](./abstract/TFBS_structure.png)
+![abstract](./abstract/abstract.png)
 
 ## Data available
 All raw sequence files are uploaded to NCBI (GEO:[GSE306886](https:)).
 
-Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559). (Haven't public yet)
+Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559
+        
+        ). (Haven't public yet)
 
 Trained model for GRN-predictor is published to [Hugging Face](https://huggingface.co/LucileLu77/KP-GRM-predictor).
 
