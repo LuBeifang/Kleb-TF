@@ -1,0 +1,20 @@
+name: KPTF
+channels:
+  - pytorch
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python>=3.10
+  - pip
+  - pip:
+    - torch>=2.8.0
+    - numpy>=2.4.0
+    - pandas>=2.3.0
+    - transformers>=4.48.0
+    - tqdm>=4.67.0
+    - torchmetrics>=1.8.0
+    - scikit-learn>=1.7.0
+    - pyfastx>=2.2.0
+    - bcbio-gff>=0.7.0
+    - fair-esm>=2.0.0
