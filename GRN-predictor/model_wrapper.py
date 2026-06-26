@@ -1,72 +1,23 @@
 import os
 import numpy as np
 import pandas as pd
+from transformers import AutoTokenizer, AutoModel, EsmModel, EsmTokenizer
 import torch
 from tqdm.auto import tqdm
 from torchmetrics.classification import BinaryAccuracy
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import average_precision_score
-from model import create_attached_model
-from captum.attr import InputXGradient 
+from sklearn.metrics import roc_auc_score, average_precision_score, matthews_corrcoef, f1_score
+from model import create_model
+
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-class DNAToProteinConverter:
-    """Convert DNA sequences to protein sequences"""
-    
-    def __init__(self):
-        # Standard genetic code
-        self.codon_table = {
-            'TTT': 'F', 'TTC': 'F', 'TTA': 'L', 'TTG': 'L',
-            'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S',
-            'TAT': 'Y', 'TAC': 'Y', 'TAA': '*', 'TAG': '*',
-            'TGT': 'C', 'TGC': 'C', 'TGA': '*', 'TGG': 'W',
-            'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
-            'CCT': 'P', 'CCC': 'P', 'CCA': 'P', 'CCG': 'P',
-            'CAT': 'H', 'CAC': 'H', 'CAA': 'Q', 'CAG': 'Q',
-            'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R',
-            'ATT': 'I', 'ATC': 'I', 'ATA': 'I', 'ATG': 'M',
-            'ACT': 'T', 'ACC': 'T', 'ACA': 'T', 'ACG': 'T',
-            'AAT': 'N', 'AAC': 'N', 'AAA': 'K', 'AAG': 'K',
-            'AGT': 'S', 'AGC': 'S', 'AGA': 'R', 'AGG': 'R',
-            'GTT': 'V', 'GTC': 'V', 'GTA': 'V', 'GTG': 'V',
-            'GCT': 'A', 'GCC': 'A', 'GCA': 'A', 'GCG': 'A',
-            'GAT': 'D', 'GAC': 'D', 'GAA': 'E', 'GAG': 'E',
-            'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G'
-        }
-    
-    def translate_dna_to_protein(self, dna_seq):
-        """Translate DNA sequence to protein sequence"""
-        dna_seq = dna_seq.upper().replace('U', 'T')  # Convert RNA to DNA if needed
-        
-        # Try all three reading frames and choose the longest ORF
-        best_protein = ""
-        
-        for frame in range(3):
-            protein = ""
-            for i in range(frame, len(dna_seq) - 2, 3):
-                codon = dna_seq[i:i+3]
-                if len(codon) == 3:
-                    amino_acid = self.codon_table.get(codon, 'X')  # X for unknown
-                    if amino_acid == '*':  # Stop codon
-                        break
-                    protein += amino_acid
-            
-            # Keep the longest protein sequence
-            if len(protein) > len(best_protein):
-                best_protein = protein
-        
-        return best_protein if best_protein else "M"  # Return at least one amino acid
-
-class DNAOneHotEncoder:
-    """One-hot encoding for DNA sequences"""
-    
+class DNAOneHotEncoder:    
     def __init__(self, max_length=1024):
         self.max_length = max_length
         self.nucleotide_map = {'A': 0, 'T': 1, 'G': 2, 'C': 3, 'N': 4}
         self.num_nucleotides = len(self.nucleotide_map)
     
     def encode_sequence(self, sequence):
-        """Encode a single DNA sequence to one-hot"""
         sequence = sequence.upper()
         # Pad or truncate to max_length
         if len(sequence) > self.max_length:
@@ -85,7 +36,6 @@ class DNAOneHotEncoder:
         return encoded
     
     def encode_batch(self, sequences):
-        """Encode a batch of DNA sequences"""
         batch_size = len(sequences)
         encoded_batch = np.zeros((batch_size, self.max_length, self.num_nucleotides), dtype=np.float32)
         
@@ -98,25 +48,28 @@ class DNAOneHotEncoder:
 
 
 class ModelWrapper:
-    def __init__(self, protein_model_name="facebook/esm2_t6_8M_UR50D", dna_encoding_method="transformer", dna_max_length=None,namefile=None,protein_max_length=None,save_path=None,learning_rate=5e-6):
+    def __init__(self, protein_model_name="facebook/esm2_t6_8M_UR50D", dna_encoding_method="transformer", dna_max_length=None,namefile=None,protein_max_length=None,save_path=None,learning_rate=5e-6, model_creator=None, num_tfs=None, tf_name_to_id=None, aux_weight_max=0.5):
         self.protein_model_name = protein_model_name
         self.protein_tokenizer = None
         self.protein_model = None
         self.protein_max_length = protein_max_length
         self.dna_tokenizer = None
         self.dna_feature_extractor = None
-        self.dna_max_length = dna_max_length  
+        self.dna_max_length = dna_max_length
         self.attached_model = None
         self.optimizer = None
         self.loss_fn = None
         self.scheduler = None
-        self.dna_converter = DNAToProteinConverter()
-        self.dna_encoding_method = dna_encoding_method 
+        self.dna_encoding_method = dna_encoding_method
         self.namefile=namefile
         self.save_path=save_path
         self.learning_rate=learning_rate
+        self.model_creator = model_creator
+        self.num_tfs = num_tfs
+        self.tf_name_to_id = tf_name_to_id or {}
+        self.aux_weight = aux_weight_max
+        self._has_per_tf_heads = False
     def calculate_peak_max_length(self, dataset):
-        """Calculate the maximum length of peak sequences in the dataset"""
         max_length = 0
         print("Calculating maximum peak sequence length...")
         
@@ -136,15 +89,6 @@ class ModelWrapper:
         
         print(f"Maximum peak sequence length found: {max_length}")
         return max_length
-    def convert_dna_to_protein_batch(self, dna_sequences):
-        """Convert batch of DNA sequences to protein sequences"""
-        protein_sequences = []
-        for dna_seq in dna_sequences:
-            protein_seq = self.dna_converter.translate_dna_to_protein(dna_seq)
-            if "prot_bert" in self.protein_tokenizer.name_or_path:
-                protein_seq = ' '.join(protein_seq)
-            protein_sequences.append(protein_seq)
-        return protein_sequences
     def get_model_settings(self, dataset=None):
         # Calculate dna_max_length if not provided
         if self.dna_max_length is None and dataset is not None:
@@ -158,16 +102,33 @@ class ModelWrapper:
             print(f"No dataset provided, using default dna_max_length: {self.dna_max_length}")
 
         # Load protein model
-        if "esm" in self.protein_model_name:
+        if "facebook/esm2" in self.protein_model_name:
             from transformers import EsmTokenizer, EsmModel
             self.protein_tokenizer = EsmTokenizer.from_pretrained(self.protein_model_name)
             self.protein_model = EsmModel.from_pretrained(self.protein_model_name).to(device)
+        elif self.protein_model_name == 'ESM_DBP':
+            import esm
+            model_path = "/home/dylan/data/ml/ESM-DBP/model/ESM-DBP.model"
+            self.esm_model = esm.ESM2()
+            self.esm_alphabet = esm.data.Alphabet.from_architecture("ESM-1b")
+            self.esm_batch_converter = self.esm_alphabet.get_batch_converter()
+            self.esm_model = torch.nn.DataParallel(self.esm_model)
+            self.esm_model.load_state_dict(torch.load(model_path, map_location=lambda storage, loc: storage))
+            self.esm_model.to(device)
+            self.esm_model.eval()
+            self.protein_tokenizer = None
+            self.protein_model = self.esm_model
+            if self.protein_max_length is None:
+                self.protein_max_length = 1024
         else:
             from transformers import AutoTokenizer, AutoModel
             self.protein_tokenizer = AutoTokenizer.from_pretrained(self.protein_model_name)
             self.protein_model = AutoModel.from_pretrained(self.protein_model_name).to(device)
         
-        self.protein_max_length = min(1024, self.protein_tokenizer.model_max_length,self.protein_max_length)
+        if self.protein_tokenizer is not None:
+            self.protein_max_length = min(1024, self.protein_tokenizer.model_max_length, self.protein_max_length or 1024)
+        elif self.protein_max_length is None:
+            self.protein_max_length = 1024
 
         # Load DNA processing method
         if self.dna_encoding_method == "transformer":
@@ -185,15 +146,25 @@ class ModelWrapper:
             raise ValueError(f"Unknown DNA encoding method: {self.dna_encoding_method}")
 
         # Create appropriate model
-        self.attached_model = create_attached_model(
+        if self.model_creator is not None:
+            creator = self.model_creator
+        else:
+            creator = create_model
+
+        self.attached_model = creator(
             self.protein_model_name,
             dna_encoding_method=self.dna_encoding_method,
-            dna_max_length=self.dna_max_length
+            dna_max_length=self.dna_max_length,
+            num_tfs=self.num_tfs
         ).to(device)
-        
+
+        self._has_per_tf_heads = hasattr(self.attached_model, 'tf_specific_heads')
         self.optimizer = torch.optim.AdamW(self.attached_model.parameters(), lr=self.learning_rate, fused=True)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-6)
-        self.loss_fn = torch.nn.BCELoss(reduction='none')
+        if self._has_per_tf_heads:
+            self.loss_fn = torch.nn.BCEWithLogitsLoss()
+        else:
+            self.loss_fn = torch.nn.BCELoss()
     
     def get_dna_embeddings(self, dna_sequences):
         """Get DNA embeddings using the appropriate method"""
@@ -221,18 +192,39 @@ class ModelWrapper:
     
     def get_protein_embeddings(self, protein_sequences):
         """Get protein embeddings using protein language model"""
+        if self.protein_model_name in ('ESM_DBP', 'ESM_DBP_LORA'):
+            data = [(f"seq_{i}", seq) for i, seq in enumerate(protein_sequences)]
+            batch_labels, batch_strs, batch_tokens = self.esm_batch_converter(data)
+            batch_tokens = batch_tokens.to(device)
+            with torch.no_grad():
+                results = self.esm_model(batch_tokens, repr_layers=[33], return_contacts=False)
+                token_representations = results["representations"][33]
+                embeddings = token_representations[:, 1:-1, :]
+            B, L, D = embeddings.shape
+            if L < self.protein_max_length:
+                pad = torch.zeros(B, self.protein_max_length - L, D, device=device)
+                embeddings = torch.cat([embeddings, pad], dim=1)
+                protein_mask = torch.zeros(B, self.protein_max_length, dtype=torch.bool, device=device)
+                protein_mask[:, L:] = True
+            elif L > self.protein_max_length:
+                embeddings = embeddings[:, :self.protein_max_length, :]
+                protein_mask = torch.zeros(B, self.protein_max_length, dtype=torch.bool, device=device)
+            else:
+                protein_mask = torch.zeros(B, self.protein_max_length, dtype=torch.bool, device=device)
+            return embeddings, protein_mask
+
         # Tokenize protein sequences
         protein_tokens = self.protein_tokenizer.batch_encode_plus(
-            protein_sequences, 
-            return_tensors="pt", 
-            padding="max_length", 
+            protein_sequences,
+            return_tensors="pt",
+            padding="max_length",
             max_length=self.protein_max_length,
             truncation=True
         )
-        
+
         input_ids = protein_tokens["input_ids"].to(device)
         attention_mask = protein_tokens["attention_mask"].to(device)
-        
+
         with torch.no_grad():
             if "esm" in self.protein_tokenizer.name_or_path:
                 # ESM models
@@ -241,30 +233,35 @@ class ModelWrapper:
             else:
                 outputs = self.protein_model(input_ids, attention_mask=attention_mask)
                 embeddings = outputs.last_hidden_state
-        return embeddings
+            protein_mask = (attention_mask == 0)
+            return embeddings, protein_mask
 
     def train_batch(self, batch):
         self.attached_model.train()
-        tf_name,tf_seqs, peak_seqs, peak_fcs, labels = batch
-        
-        # Convert TF DNA sequences to protein sequences
-        protein_sequences = self.convert_dna_to_protein_batch(tf_seqs)
-        
-        # Get protein embeddings for TF sequences
-        tf_embeddings = self.get_protein_embeddings(protein_sequences)
-        
-        # Get DNA embeddings for peak sequences
+        tf_name, tf_seqs, peak_seqs, peak_fcs, tf_id, labels = batch
+        protein_sequences=tf_seqs
+        tf_embeddings, protein_mask = self.get_protein_embeddings(protein_sequences)
         peak_embeddings = self.get_dna_embeddings(peak_seqs)
 
-        # Forward pass through attached model
-        preds = self.attached_model(tf_embeddings, peak_embeddings)
-        loss = self.loss_fn(preds.squeeze(), labels.squeeze().to(device))
-        loss = torch.mean(loss)
+        if self._has_per_tf_heads:
+            tf_id = tf_id.to(device)
+            logits, shared_logits = self.attached_model(tf_embeddings, peak_embeddings, tf_id,
+                                                        protein_mask=protein_mask, return_all=True) 
+            primary_loss = self.loss_fn(logits.squeeze(), labels.squeeze().to(device))
+            aux_loss = self.loss_fn(shared_logits.squeeze(), labels.squeeze().to(device))
+            loss = primary_loss + self.aux_weight * aux_loss
+            pri_val = primary_loss.item()
+            aux_val = aux_loss.item()
+        else:
+            preds = self.attached_model(tf_embeddings, peak_embeddings, protein_mask=protein_mask)
+            loss = self.loss_fn(preds.squeeze(), labels.squeeze().to(device))
+            pri_val = loss.item()
+            aux_val = None
 
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-        return loss.item(), labels.mean()
+        return loss.item(), labels.mean(), pri_val, aux_val
 
     @torch.no_grad()
     def evaluate(self, val_loader):
@@ -278,36 +275,41 @@ class ModelWrapper:
         peak_fcs_list = []
         tf_name_list = []
         for batch in tqdm(val_loader, leave=True, position=0):
-            tf_name, tf_seqs, peak_seqs, peak_fcs, labels = batch
+            tf_name, tf_seqs, peak_seqs, peak_fcs, tf_id, labels = batch
             tf_name_list.extend(tf_name)
             tf_seqs_list.extend(tf_seqs)
             peak_seqs_list.extend(peak_seqs)
             peak_fcs_list.extend(peak_fcs)
 
-            protein_sequences = self.convert_dna_to_protein_batch(tf_seqs)
-            
-            tf_embeddings = self.get_protein_embeddings(protein_sequences)
-
+            tf_embeddings, protein_mask = self.get_protein_embeddings(tf_seqs)
             peak_embeddings = self.get_dna_embeddings(peak_seqs)
 
-            # Predictions
-            preds = self.attached_model(tf_embeddings, peak_embeddings)
+            if self._has_per_tf_heads:
+                tf_id = tf_id.to(device)
+                preds = self.attached_model(tf_embeddings, peak_embeddings, tf_id, protein_mask=protein_mask)
+            else:
+                preds = self.attached_model(tf_embeddings, peak_embeddings, protein_mask=protein_mask)
             preds_list.append(preds.squeeze().cpu().numpy())
             labels_list.append(labels.squeeze().cpu().numpy())
 
             loss = self.loss_fn(preds.squeeze(), labels.squeeze().to(device))
-            loss = loss.mean()
             loss_list.append(loss.item())
 
         all_preds = np.concatenate(preds_list)
         all_labels = np.concatenate(labels_list)
+        if self._has_per_tf_heads:
+            all_preds = 1.0 / (1.0 + np.exp(-all_preds))
+        all_preds_binary = (all_preds >= 0.8).astype(int)
         acc = BinaryAccuracy(threshold=0.8)(torch.tensor(all_preds), torch.tensor(all_labels))
         auc = roc_auc_score(all_labels, all_preds)
         auprc = average_precision_score(all_labels, all_preds)
-        
-        return (np.mean(np.array(loss_list)), acc.cpu().numpy(), auc, auprc, 
+        mcc = matthews_corrcoef(all_labels, all_preds_binary)
+        f1 = f1_score(all_labels, all_preds_binary)
+
+        return (np.mean(np.array(loss_list)), acc.cpu().numpy(), auc, auprc, mcc, f1,
                 all_labels.mean().astype(np.float64), all_preds, all_labels, tf_name_list,
                 tf_seqs_list, peak_seqs_list, peak_fcs_list)
+    
     def train(self, train_dataset, val_dataset, test_dataset, batch_size, epochs=35):
 
         train_loader = torch.utils.data.DataLoader(
@@ -322,34 +324,55 @@ class ModelWrapper:
         for epoch in list(range(1, epochs+1)):
             loss_list = []
             label_list = []
-            for batch in tqdm(train_loader, leave=True, position=0, desc=f'Epoch {epoch}'):
-                loss, mean_label = self.train_batch(batch)
+            pri_loss_list = []
+            aux_loss_list = []
+            current_lr = self.optimizer.param_groups[0]['lr']
+            pbar = tqdm(train_loader, leave=True, position=0, desc=f'Epoch {epoch}')
+            for batch in pbar:
+                loss, mean_label, pri_val, aux_val = self.train_batch(batch, epoch)
                 loss_list.append(loss)
                 label_list.append(mean_label)
+                pri_loss_list.append(pri_val)
+                if aux_val is not None:
+                    aux_loss_list.append(aux_val)
 
-            
-            val_loss, val_acc, val_auc, val_auprc, val_label,test_preds, test_labels,tf_name_list, test_tf_seqs_list, test_peak_seqs_list, test_peak_fcs_list = self.evaluate(val_loader)
-            # val_loss, val_label, val_cor, val_pvalue = self.evaluate(val_loader)
+                postfix = {'loss': f'{loss:.3f}', 'lr': f'{current_lr:.2e}'}
+                if self._has_per_tf_heads:
+                    postfix['pri'] = f'{pri_val:.3f}'
+                    postfix['aux'] = f'{aux_val:.3f}'
+                pbar.set_postfix(postfix)
+
+            val_loss, val_acc, val_auc, val_auprc, val_mcc, val_f1, val_label,test_preds, test_labels,tf_name_list, test_tf_seqs_list, test_peak_seqs_list, test_peak_fcs_list = self.evaluate(val_loader)
 
             self.scheduler.step(val_loss)
-            current_lr = self.scheduler.get_last_lr()[0]  # 获取当前学习率
+            current_lr = self.scheduler.get_last_lr()[0]
 
+            train_loss_avg = np.mean(loss_list)
+            log_parts = [f'Train Loss: {train_loss_avg:.4f}']
+            if self._has_per_tf_heads:
+                log_parts.append(f'pri: {np.mean(pri_loss_list):.4f}  aux: {np.mean(aux_loss_list):.4f}')
+            log_parts.append(f'mean labels: {np.mean(label_list):.4f}')
             print(f"Epoch {epoch}: Learning Rate = {current_lr}")
-            print(f'  Train Loss: {np.mean(loss_list):.4f}, mean labels: {np.mean(label_list):.4f}')
-            print(f'  Val Loss: {val_loss:.4f}, Val Labels: {val_label:.4f}, Val Acc: {val_acc:.4f}, Val AUC: {val_auc:.4f}, Val AUPRC: {val_auprc:.4f}')
+            train_log = '  '.join(log_parts)
+            print(f'  {train_log}')
+            print(f'  Val Loss: {val_loss:.4f}, Val Labels: {val_label:.4f}, Val Acc: {val_acc:.4f}, Val AUC: {val_auc:.4f}, Val AUPRC: {val_auprc:.4f}, Val MCC: {val_mcc:.4f}, Val F1: {val_f1:.4f}')
             # print(f'  Val Loss: {val_loss:.4f}, Val Labels: {val_label:.4f}, Val cor: {val_cor:.4f}, val p-value: {val_pvalue:.4e}')
 
-            history.append({
+            history_entry = {
                 'epoch': epoch,
-                'learning_rate': current_lr ,
+                'learning_rate': current_lr,
                 'train_loss': np.mean(loss_list),
                 'val_loss': val_loss,
                 'val_acc': val_acc,
                 'val_auc': val_auc,
-                'val_auprc':val_auprc,
-                # 'val_cor': val_cor,
-                # 'val_pvalue' : val_pvalue,
-            })
+                'val_auprc': val_auprc,
+                'val_mcc': val_mcc,
+                'val_f1': val_f1,
+            }
+            if self._has_per_tf_heads:
+                history_entry['train_primary'] = np.mean(pri_loss_list)
+                history_entry['train_aux'] = np.mean(aux_loss_list)
+            history.append(history_entry)
 
             if val_auc > best_auc:
                 best_auc = val_auc
@@ -367,19 +390,17 @@ class ModelWrapper:
         # TEST
         test_results = []
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=16)
-        final_test_loss, final_test_acc, final_test_auc, final_test_auprc, final_test_label,test_preds, test_labels, tf_name_list, test_tf_seqs_list, test_peak_seqs_list, test_peak_fcs_list = self.evaluate(test_loader)
-        # final_test_loss, final_test_label, final_test_cor, final_test_pvalue = self.evaluate(test_loader)
+        final_test_loss, final_test_acc, final_test_auc, final_test_auprc, final_test_mcc, final_test_f1, final_test_label,test_preds, test_labels, tf_name_list, test_tf_seqs_list, test_peak_seqs_list, test_peak_fcs_list = self.evaluate(test_loader)
         print(f'\nFinal Test Performance:')
-        print(f'  Loss: {final_test_loss:.4f}, label: {final_test_label:.4f}  Acc: {final_test_acc:.4f}, AUC: {final_test_auc:.4f}, AUPRC: {final_test_auprc:.4f}')
-        # print(f'  Loss: {final_test_loss:.4f}, label: {final_test_label:.4f}  Cor: {final_test_cor:.4f}, p-value: {final_test_pvalue:.4e}')
+        print(f'  Loss: {final_test_loss:.4f}, label: {final_test_label:.4f}  Acc: {final_test_acc:.4f}, AUC: {final_test_auc:.4f}, AUPRC: {final_test_auprc:.4f}, MCC: {final_test_mcc:.4f}, F1: {final_test_f1:.4f}')
         test_results.append({
             'loss': final_test_loss,
             'label': final_test_label,
-            # 'pearson_r': final_test_cor,
-            # 'p_value': final_test_pvalue,
             'acc': final_test_acc,
             'auc': final_test_auc,
-            'auprc': final_test_auprc
+            'auprc': final_test_auprc,
+            'mcc': final_test_mcc,
+            'f1': final_test_f1,
             })
         test_df = pd.DataFrame(test_results)
         test_df.to_csv(os.path.join(self.save_path, f'test_results_{self.namefile}.csv'), index=False)
@@ -390,17 +411,19 @@ class ModelWrapper:
         self.attached_model.eval()
         test_results = []
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32, shuffle = False)
-        final_test_loss, final_test_acc, final_test_auc, final_test_auprc, final_test_label, test_preds, test_labels,tf_name_list, test_tf_seqs_list, test_peak_seqs_list, test_peak_fcs_list = self.evaluate(test_loader)
+        final_test_loss, final_test_acc, final_test_auc, final_test_auprc, final_test_mcc, final_test_f1, final_test_label, test_preds, test_labels,tf_name_list, test_tf_seqs_list, test_peak_seqs_list, test_peak_fcs_list = self.evaluate(test_loader)
 
         print(f'\nFinal Test Performance:')
-        print(f'  Loss: {final_test_loss:.4f}, label: {final_test_label:.4f}  Acc: {final_test_acc:.4f}, AUC: {final_test_auc:.4f}, AUPRC: {final_test_auprc:.4f}')
+        print(f'  Loss: {final_test_loss:.4f}, label: {final_test_label:.4f}  Acc: {final_test_acc:.4f}, AUC: {final_test_auc:.4f}, AUPRC: {final_test_auprc:.4f}, MCC: {final_test_mcc:.4f}, F1: {final_test_f1:.4f}')
 
         test_results.append({
             'loss': final_test_loss,
             'label': final_test_label,
             'acc': final_test_acc,
             'auc': final_test_auc,
-            'auprc': final_test_auprc
+            'auprc': final_test_auprc,
+            'mcc': final_test_mcc,
+            'f1': final_test_f1,
             })
         test_df = pd.DataFrame(test_results)
         test_df.to_csv(os.path.join(self.save_path, f'test_results_{self.namefile}.csv'), index=False)
@@ -420,27 +443,35 @@ class ModelWrapper:
         self.attached_model.load_state_dict(checkpoint['model_state_dict'])
         self.attached_model.eval()
 
-    @torch.no_grad()
-    def simple_predict(self,data_for_predict):
-        self.attached_model.eval()
-        preds_list = []
-        tf_seqs_list = []
-        peak_seqs_list = []
-        tf_name_list = []
-        
-        for batch in tqdm(data_for_predict, leave=True, position=0):
-            tf_name, tf_seqs, peak_seqs = batch
-            tf_name_list.extend(tf_name)
-            tf_seqs_list.extend(tf_seqs)
-            peak_seqs_list.extend(peak_seqs)
+    # @torch.no_grad()
+    # def simple_predict(self,data_for_predict):
+    #     self.attached_model.eval()
+    #     preds_list = []
+    #     tf_seqs_list = []
+    #     peak_seqs_list = []
+    #     tf_name_list = []
 
-            protein_sequences = self.convert_dna_to_protein_batch(tf_seqs)
-            
-            tf_embeddings = self.get_protein_embeddings(protein_sequences)
+    #     for batch in tqdm(data_for_predict, leave=True, position=0):
+    #         tf_name, tf_seqs, peak_seqs = batch
+    #         tf_name_list.extend(tf_name)
+    #         tf_seqs_list.extend(tf_seqs)
+    #         peak_seqs_list.extend(peak_seqs)
 
-            peak_embeddings = self.get_dna_embeddings(peak_seqs)
+    #         tf_embeddings, protein_mask = self.get_protein_embeddings(tf_seqs)
 
-            # Predictions
-            preds = self.attached_model(tf_embeddings, peak_embeddings)
-            preds_list.append(preds.squeeze().cpu().numpy())
-        return np.concatenate(preds_list)
+    #         peak_embeddings = self.get_dna_embeddings(peak_seqs)
+
+    #         # Predictions
+    #         if self._has_per_tf_heads:
+    #             tf_id_list = [self.tf_name_to_id.get(name, 0) for name in tf_name]
+    #             tf_id = torch.tensor(tf_id_list, dtype=torch.long, device=device)
+    #             preds = self.attached_model(tf_embeddings, peak_embeddings, tf_id, protein_mask=protein_mask)
+    #         else:
+    #             preds = self.attached_model(tf_embeddings, peak_embeddings, protein_mask=protein_mask)
+    #         preds_list.append(preds.squeeze().cpu().numpy())
+
+    #     all_preds = np.concatenate(preds_list)
+    #     if self._has_per_tf_heads:
+    #         all_preds = 1.0 / (1.0 + np.exp(-all_preds))
+    #     return all_preds
+    

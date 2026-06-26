@@ -1,34 +1,18 @@
 
-from random import sample,shuffle
+from random import sample, shuffle
 import torch
 from torch.utils.data import Dataset
 import pandas as pd
 import numpy as np
 import pyfastx
 from tqdm.auto import tqdm
-import pyfastx
-
-
-seed = 42
-torch.manual_seed(seed)          
-np.random.seed(seed)             
-np.random.seed(seed)
 
 def tf_fa_path_parser(p):
     return p.split('/')[-1].split('.')[0]
 
 def peak_fa_path_parser(p):
     return p.split('/')[-1].split('.')[0]
-def partial_shuffle(seq: str, shuffle_frac: float) -> str:
-    """
-    Partially shuffle a DNA sequence.
-    shuffled_seq : str
-        Sequence of same length where only a subset of positions
-        have been randomly permuted.
-    """
-    if not 0.0 <= shuffle_frac <= 1.0:
-        raise ValueError("shuffle_frac must be between 0.0 and 1.0")
-
+def partial_shuffle(seq: str, shuffle_frac: float,seed: int) -> str:
     L = len(seq)
     if L == 0 or shuffle_frac == 0.0:
         return seq
@@ -38,7 +22,7 @@ def partial_shuffle(seq: str, shuffle_frac: float) -> str:
     positions = sorted(sample(range(L), k=k))
 
     chars = [seq[i] for i in positions]
-
+    np.random.seed(seed)
     shuffle(chars)
 
     seq_list = list(seq)
@@ -68,7 +52,12 @@ class TFDataset(Dataset):
         assert len(self.peak_with_seqs_df) == len(self.binding_peaks_df)
         print('Finish reading positive peak sequences')
 
-        if self.ifshuffle_neg and not self.peakshuffle:
+        unique_tfs = sorted(tf_seqs_df['tf_name'].unique())
+        self.tf_name_to_id = {name: i for i, name in enumerate(unique_tfs)}
+        self.num_tfs = len(unique_tfs)
+        print(f'TF mapping: {self.tf_name_to_id}')
+
+        if ifshuffle_neg and not peakshuffle:
             total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)).astype(int)
             tmp_neg = [
             self._dna_permutations(peak_fasta_paths, binding_peaks_csv) for _ in range(neg_sampling_rate)
@@ -77,7 +66,7 @@ class TFDataset(Dataset):
             neg_peak_seqs = pd.concat([tmp_neg.sample(n=total_neg,random_state=self.random_seed)], ignore_index=True)
             self.neg_peak_with_seqs_df = pd.merge(tf_seqs_df, neg_peak_seqs, on='tf_name', validate='one_to_many')
 
-        elif self.peakshuffle and self.ifshuffle_neg:
+        elif peakshuffle and ifshuffle_neg:
             total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/2).astype(int)
             tmp_neg = [
             self._dna_permutations(peak_fasta_paths, binding_peaks_csv) for _ in range(neg_sampling_rate)
@@ -91,24 +80,25 @@ class TFDataset(Dataset):
         else:
             neg_peak_seqs_tss = self._get_neg_peak_seqs_tss(tf_fasta_paths, whole_genome_fa_path, binding_peaks_csv, all_peaks_csv)
             neg_peak_seqs_all = self._get_neg_peak_seqs_whole(tf_fasta_paths, whole_genome_fa_path, binding_peaks_csv, all_peaks_csv)
-            #shuffled_neg_peak_seqs = self._get_shuffled_neg_peak_seqs()
             shuffled_neg_peak_seqs= self._get_all_noverlap_neg_peak_seqs()
-            #neg_peak_seqs=pd.concat([shuffled_neg_peak_seqs,neg_peak_seqs_all])
-            total_neg=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/3).astype(int)
-            neg_peak_seqs_tss=neg_peak_seqs_tss.sample(n=total_neg,random_state=42)
-            neg_peak_seqs_all=neg_peak_seqs_all.sample(n=total_neg,random_state=42)
-            shuffled_neg_peak_seqs=shuffled_neg_peak_seqs.sample(n=total_neg,random_state=42)
+            neg_tss=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/3).astype(int)
+            neg_all=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/3).astype(int)
+            neg_shuffle=np.round(self.neg_sampling_rate*len(self.binding_peaks_df)/3).astype(int)
+            neg_peak_seqs_tss=neg_peak_seqs_tss.sample(n=neg_tss,random_state=42)
+            neg_peak_seqs_all=neg_peak_seqs_all.sample(n=neg_all,random_state=42)
+            shuffled_neg_peak_seqs=shuffled_neg_peak_seqs.sample(n=neg_shuffle,random_state=42)
             neg_peak_seqs=pd.concat([neg_peak_seqs_tss,neg_peak_seqs_all,shuffled_neg_peak_seqs])
             self.neg_peak_with_seqs_df = pd.merge(tf_seqs_df, neg_peak_seqs, on='tf_name', validate='one_to_many')
         
+        
 
         print(self.neg_peak_with_seqs_df.shape, neg_peak_seqs.shape)
-        #assert len(self.neg_peak_with_seqs_df) == int(self.neg_sampling_rate * len(self.binding_peaks_df))
         print('Finish creating negative peak sequences',f"dimension of negative data is {self.neg_peak_with_seqs_df.shape}, the biniding peak size is {self.binding_peaks_df.shape}")
 
 
     
     def _get_neg_peak_seqs_whole(self, tf_fasta_paths, whole_genome_path,binding_peaks_csv, all_peaks_csv):
+        """generate negative samples, excluding all binding sites"""
         df_all = pd.read_csv(all_peaks_csv, sep=',', header=None, index_col=False, usecols=[0, 2, 3, 8], names=['tf_name', 'binding_start', 'binding_end', 'binding_fc'])
 
         peak_seq_lengths = self.peak_with_seqs_df['peak_seq'].apply(len).values
@@ -126,8 +116,6 @@ class TFDataset(Dataset):
             pos_count = tf_pos_counts[tf_name]
             neg_count = int(pos_count * self.neg_sampling_rate)
 
-
-            # Retrive the present TF's binding region in binding_peaks_df
             tf_binding_regions = [
             (row['binding_start'], row['binding_end'])
             for _, row in df_all[df_all['tf_name'] == tf_name].iterrows()
@@ -170,7 +158,6 @@ class TFDataset(Dataset):
             if generated < neg_count:
                 print(f"warning: only {generated}/{neg_count} negs were generated for {tf_name}")
 
-        # Store the generated sequences
         peak_df = pd.DataFrame({
             'tf_name': tf_names,
             'peak_seq': peak_seqs,
@@ -179,7 +166,6 @@ class TFDataset(Dataset):
         assert len(peak_df) == int(self.neg_sampling_rate * len(self.binding_peaks_df))
         return peak_df
     def _get_neg_peak_seqs_tss(self, tf_fasta_paths, whole_genome_path,binding_peaks_csv, all_peaks_csv):
-        """generate negative samples from TSS promoter regions, excluding all binding sites"""
         peak_seq_lengths = self.peak_with_seqs_df['peak_seq'].apply(len).values
 
         whole_genome = pyfastx.Fasta(whole_genome_path)
@@ -194,9 +180,6 @@ class TFDataset(Dataset):
             tf_name = p
             pos_count = tf_pos_counts[tf_name]
             neg_count = int(pos_count * self.neg_sampling_rate)
-
-
-            # Retrieve the present TF's binding regions from all_binding_peaks_df
             tf_binding_regions = self.all_binding_peaks_df[self.all_binding_peaks_df['tf_name'] == tf_name][['binding_start', 'binding_end']].values.tolist()
 
             generated = 0
@@ -213,15 +196,8 @@ class TFDataset(Dataset):
                 attempts += 1
 
                 current_peak_len = np.random.choice(peak_seq_lengths)
-
-                # Randomly select a TSS
-                
-
-
                 tss_item = self.tss_positions[np.random.choice(len(self.tss_positions))]
-
                 tss, strand = tss_item
-
                 if strand == '+':
                     prom_start = max(0, tss - 300)
                     prom_end = min(len(whole_genome), tss + 200)
@@ -256,7 +232,6 @@ class TFDataset(Dataset):
             if generated < neg_count:
                 print(f"warning: only {generated}/{neg_count} negs were generated for {tf_name}")
 
-        # Store the generated sequences
         peak_df = pd.DataFrame({
             'tf_name': tf_names,
             'peak_seq': peak_seqs,
@@ -266,7 +241,7 @@ class TFDataset(Dataset):
         return peak_df
 
     def _get_pos_peak_seqs(self, peak_fasta_paths, binding_peaks_csv):
-        tf_names = []  # one to many
+        tf_names = []  
         peak_seqs = []
         peak_fc = []
         binding_starts = []
@@ -293,35 +268,29 @@ class TFDataset(Dataset):
         return peak_df
     
     def _get_all_noverlap_neg_peak_seqs(self):
-        """Generate negative samples using ALL non-overlapping peaks from other TFs"""
         tf_pos_counts = self.peak_with_seqs_df['tf_name'].value_counts()
         
         all_tf_names = []
         all_peak_seqs = []
         
         for tf_name in tqdm(tf_pos_counts.index, desc="Processing TFs for non-overlap negatives"):
-            # Get current TF's binding regions
             tf_binding_regions = self.all_binding_peaks_df[
                 self.all_binding_peaks_df['tf_name'] == tf_name
             ][['binding_start', 'binding_end']].values.tolist()
             
-            # Get positive peaks from other TFs
             other_tf_peaks = self.pos_peak_seqs[self.pos_peak_seqs['tf_name'] != tf_name]
             
             if len(other_tf_peaks) == 0:
                 print(f"Warning: No other TF peaks available for {tf_name}")
                 continue
-            
-            # Filter for non-overlapping peaks
+
             non_overlap_peaks = []
-            
             for _, row in other_tf_peaks.iterrows():
                 random_start = row['binding_start']
                 random_end = row['binding_end']
                 seq = row['peak_seq']
-                fc = row.get('peak_fc', 0.0)  # Use FC if available, otherwise 0
-                
-                # Check overlap with current TF's binding regions
+                fc = row.get('peak_fc', 0.0)  
+    
                 overlaps = False
                 for binding_start, binding_end in tf_binding_regions:
                     if not (random_end <= binding_start or random_start >= binding_end):
@@ -334,14 +303,12 @@ class TFDataset(Dataset):
                         'fc': fc
                     })
             
-            # Add all non-overlapping peaks as negative samples
             for peak_data in non_overlap_peaks:
                 all_tf_names.append(tf_name)
                 all_peak_seqs.append(peak_data['seq'])
                 
             print(f"TF {tf_name}: Found {len(non_overlap_peaks)} non-overlapping negative peaks from other TFs")
         
-        # Create DataFrame with all collected negative samples
         neg_peak_df = pd.DataFrame({
             'tf_name': all_tf_names,
             'peak_seq': all_peak_seqs,
@@ -351,7 +318,7 @@ class TFDataset(Dataset):
 
     def _dna_permutations(self, peak_fasta_paths, binding_peaks_csv):
         
-        tf_names = []  # one to many
+        tf_names = []  
         peak_seqs = []
         peak_fc = []
         binding_starts = []
@@ -392,8 +359,7 @@ class TFDataset(Dataset):
 
     def _read_binding_csv(self, binding_peaks_csv):
         df = pd.read_csv(binding_peaks_csv, sep=',', header=None, index_col=False, usecols=[0, 2, 3, 8], names=['tf_name', 'binding_start', 'binding_end', 'binding_fc'])
-        df['binding_start'] = df['binding_start'] - 1  # Convert to 0-base
-        # print(df)
+        df['binding_start'] = df['binding_start'] - 1 
         return df
 
     def _read_tss(self, gff_path):
@@ -402,8 +368,8 @@ class TFDataset(Dataset):
         gene_df = df[df['type'] == 'gene']
         tss_positions = []
         for _, row in gene_df.iterrows():
-            start = row['start'] - 1  # 1-based to 0-based
-            end = row['end']  # 1-based inclusive, for slice end
+            start = row['start'] - 1  
+            end = row['end']  
             if row['strand'] == '+':
                 tss = start
             elif row['strand'] == '-':
@@ -417,9 +383,6 @@ class TFDataset(Dataset):
         pos_len = len(self.binding_peaks_df)
         neg_len = int(self.neg_sampling_rate * pos_len)
         return pos_len + neg_len
-
-
-
 
     def __getitem__(self, idx):
         if idx < len(self.peak_with_seqs_df):
@@ -436,5 +399,5 @@ class TFDataset(Dataset):
             peak_seq = self.neg_peak_with_seqs_df.iloc[neg_idx]['peak_seq']
             peak_fc = self.neg_peak_with_seqs_df.iloc[neg_idx]['peak_fc']
             label = 0
-        return tf_name, tf_seq, peak_seq, peak_fc, torch.tensor(label, dtype=torch.float32)
-
+        tf_id = torch.tensor(self.tf_name_to_id[tf_name], dtype=torch.long)
+        return tf_name, tf_seq, peak_seq, peak_fc, tf_id, torch.tensor(label, dtype=torch.float32)
