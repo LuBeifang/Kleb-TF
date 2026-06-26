@@ -11,9 +11,9 @@ This GitHub repository contains all the custom scripts and shell commands used i
 ## Data available
 All raw sequence files are uploaded to NCBI (GEO:[GSE306886](https:)).
 
-Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559
-        
-        ). (Haven't public yet)
+Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559). 
+
+(Haven't public yet)
 
 Trained model for GRN-predictor is published to [Hugging Face](https://huggingface.co/LucileLu77/KP-GRM-predictor).
 
@@ -29,15 +29,13 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
 
 The install time should be around 30 mins.
 
-        conda create -n kleb-tf python=3.11 -y
-        conda activate kleb-tf
         git clone https://github.com/LuBeifang/Kleb-TF/
         cd Kleb-TF/GRN-predictor
-        pip install -r requirements.txt
+        conda env create -f environment.yml
         wget -c https://huggingface.co/LucileLu77/KP-GRM-predictor/resolve/main/best_model.pt
         
 ### KP-GRN predict
-        usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
+        usage: predict_pro_permu.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
 
         Predict TF and DNA binding
 
