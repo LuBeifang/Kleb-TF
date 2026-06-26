@@ -27,7 +27,6 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
 
 ### Install
 
-The install time should be around 30 mins.
 
         git clone https://github.com/LuBeifang/Kleb-TF/
         cd Kleb-TF/GRN-predictor
