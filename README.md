@@ -13,8 +13,6 @@ All raw sequence files are uploaded to NCBI (GEO:[GSE306886](https:)).
 
 Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559). 
 
-(Haven't public yet)
-
 Trained model for GRN-predictor is published to [Hugging Face](https://huggingface.co/Dylan-LE/KP-GRM-predictor/).
 
 If you have any further requests, please contact xindeng@cityu.edu.hk or beifanglu2-c@my.cityu.edu.hk. We are pleased to help!
