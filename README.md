@@ -15,6 +15,8 @@ Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559).
 
 Trained model for GRN-predictor is published to [Hugging Face](https://huggingface.co/Dylan-LE/KP-GRM-predictor/).
 
+Download the models of ESM-DBP at [Hugging Face](https://huggingface.co/zengwenwu/ESM-DBP/tree/main).
+
 If you have any further requests, please contact xindeng@cityu.edu.hk or beifanglu2-c@my.cityu.edu.hk. We are pleased to help!
 
 ## Code available
