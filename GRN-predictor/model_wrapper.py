@@ -48,7 +48,7 @@ class DNAOneHotEncoder:
 
 
 class ModelWrapper:
-    def __init__(self, protein_model_name="facebook/esm2_t6_8M_UR50D", dna_encoding_method="transformer", dna_max_length=None,namefile=None,protein_max_length=None,save_path=None,learning_rate=5e-6, model_creator=None, num_tfs=None, tf_name_to_id=None, aux_weight_max=0.5):
+    def __init__(self, protein_model_name="facebook/esm2_t6_8M_UR50D", dna_encoding_method="transformer", dna_max_length=None,namefile=None,protein_max_length=None,save_path=None,learning_rate=5e-6, model_creator=None, num_tfs=None, tf_name_to_id=None, aux_weight=0.5):
         self.protein_model_name = protein_model_name
         self.protein_tokenizer = None
         self.protein_model = None
@@ -67,7 +67,7 @@ class ModelWrapper:
         self.model_creator = model_creator
         self.num_tfs = num_tfs
         self.tf_name_to_id = tf_name_to_id or {}
-        self.aux_weight = aux_weight_max
+        self.aux_weight = aux_weight
         self._has_per_tf_heads = False
     def calculate_peak_max_length(self, dataset):
         max_length = 0
