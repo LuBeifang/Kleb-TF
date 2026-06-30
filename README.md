@@ -8,16 +8,26 @@ This GitHub repository contains all the custom scripts and shell commands used i
 ## Graphic abstract
 ![abstract](./abstract/abstract.png)
 
-## Data available
-All raw sequence files are uploaded to NCBI (GEO:[GSE306886](https:)).
+## Data & Models Availability
 
-Processed files are uploaded to [Zenodo](10.5281/zenodo.16993559). 
+All raw sequence files, processed data, and pre-trained models are publicly available:
 
-Trained model for GRN-predictor is published to [Hugging Face](https://huggingface.co/Dylan-LE/KP-GRM-predictor/).
+* **Raw Sequence Files:** Uploaded to NCBI GEO under accession [GSE306886](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE306886).
+* **Processed Data:** Available on Zenodo at [DOI: 10.5281/zenodo.16993559](https://doi.org/10.5281/zenodo.16993559).
+* **GRN-predictor Model:** Published on Hugging Face at [Dylan-LE/KP-GRM-predictor](https://huggingface.co/Dylan-LE/KP-GRM-predictor/).
 
-Download the models of ESM-DBP at [Hugging Face](https://huggingface.co/zengwenwu/ESM-DBP/tree/main).
+### Setup & Model Download
 
-If you have any further requests, please contact xindeng@cityu.edu.hk or beifanglu2-c@my.cityu.edu.hk. We are pleased to help!
+To use the GRN-predictor, you will also need to download the dependency models from ESM-DBP.
+
+1. Navigate to the ESM-DBP Hugging Face repository: [zengwenwu/ESM-DBP](https://huggingface.co/zengwenwu/ESM-DBP/tree/main).
+2. Download the required weights and place them directly into your local `GRN-predictor` directory:
+
+```bash
+# Example structure
+└── your-project-repo/
+    └── GRN-predictor/
+        └── [Downloaded ESM-DBP model files here]
 
 ## Code available
 

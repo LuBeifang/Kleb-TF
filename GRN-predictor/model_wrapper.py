@@ -108,7 +108,7 @@ class ModelWrapper:
             self.protein_model = EsmModel.from_pretrained(self.protein_model_name).to(device)
         elif self.protein_model_name == 'ESM_DBP':
             import esm
-            model_path = "/ESM-DBP/model/ESM-DBP.model"
+            model_path = "ESM-DBP.model"
             self.esm_model = esm.ESM2()
             self.esm_alphabet = esm.data.Alphabet.from_architecture("ESM-1b")
             self.esm_batch_converter = self.esm_alphabet.get_batch_converter()
