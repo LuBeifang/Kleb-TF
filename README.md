@@ -28,6 +28,7 @@ To use the GRN-predictor, you will also need to download the dependency models f
 └── your-project-repo/
     └── GRN-predictor/
         └── [Downloaded ESM-DBP model files here]
+```
 
 ## Code available
 
