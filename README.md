@@ -42,7 +42,7 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
         git clone https://github.com/LuBeifang/Kleb-TF/
         cd Kleb-TF/GRN-predictor
         conda env create -f environments.yml
-        wget -c https://huggingface.co/LucileLu77/KP-GRM-predictor/resolve/main/best_model.pt
+        git clone https://huggingface.co/Dylan-LE/KP-GRM-predictor
         
 ### KP-GRN predict
         usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
