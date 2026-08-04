@@ -32,7 +32,7 @@ To use the GRN-predictor, you will also need to download the dependency models f
 
 ## Code available
 
-System requirement: Ubuntu 22.04; R version 4.5.1; CUDA ≥ 12.6;
+System requirement: Ubuntu 22.04; R version 4.5.1; CUDA version ≥ 12.1;
 
 **Notes:** We highly recommend creating a separate conda environment.
 
@@ -61,7 +61,7 @@ System requirement: Ubuntu 22.04; R version 4.5.1; CUDA ≥ 12.6;
         -o, --output OUTPUT   Output directory path
 ### Example 
 
-        python predict.py -tf example/VmrR.fa -g example/SH12.fna -gff example/SH12.gff -model best_model.pt -t 0.95 -o result_file
+        python predict.py -tf example/VmrR.fa -g example/SH12.fna -gff example/SH12.gff -model 96TF/best_model.pt -t 0.95 -o result_file
         
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
