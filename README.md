@@ -45,7 +45,7 @@ System requirement: Ubuntu 22.04; R version: 4.5.1.
         wget -c https://huggingface.co/LucileLu77/KP-GRM-predictor/resolve/main/best_model.pt
         
 ### KP-GRN predict
-        usage: predict_pro_permu.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
+        usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
 
         Predict TF and DNA binding
 
