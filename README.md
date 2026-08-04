@@ -41,7 +41,7 @@ System requirement: Ubuntu 22.04; R version: 4.5.1. CUDA Version: 13.0
 
         git clone https://github.com/LuBeifang/Kleb-TF/
         cd Kleb-TF/GRN-predictor
-        conda env create -f environments.yml
+        conda env create -f requirements.yml
         git clone https://huggingface.co/Dylan-LE/KP-GRM-predictor
         
 ### KP-GRN predict
