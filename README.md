@@ -32,9 +32,9 @@ To use the GRN-predictor, you will also need to download the dependency models f
 
 ## Code available
 
-System requirement: Ubuntu 22.04; R version: 4.5.1. CUDA Version: 13.0 
+System requirement: Ubuntu 22.04; R version 4.5.1; CUDA ≥ 12.6;
 
-**Notes:** We highly recommend creating a separate conda environment to manage the following software tools.
+**Notes:** We highly recommend creating a separate conda environment.
 
 ### Install
 
