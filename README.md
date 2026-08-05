@@ -64,7 +64,7 @@ l
         -o, --output OUTPUT   Output directory path
 ### Example 
 
-        python predict.py -tf example/VmrR.fa -g example/SH12.fna -gff example/SH12.gff -model 96TF/best_model.pt -t 0.95 -o result_file
+        python predict.py -tf example/VmrR.fa -g example/SH12.fna -gff example/SH12.gff -model best_model.pt -t 0.95 -o result_file
         
 ## Cite us
 This project is licensed under the MIT License. See the LICENSE file for details.
