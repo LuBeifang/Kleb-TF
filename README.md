@@ -42,9 +42,10 @@ System requirement: Ubuntu 22.04; R version 4.5.1; CUDA version ≥ 12.1;
         git clone https://github.com/LuBeifang/Kleb-TF/
         cd Kleb-TF/GRN-predictor
         conda env create -f requirements.yml
+        conda activate KPTF
         wget -c https://huggingface.co/Dylan-LE/KP-GRM-predictor/resolve/main/96TF/best_model.pt
         wget -c https://huggingface.co/zengwenwu/ESM-DBP/resolve/main/ESM-DBP.model
-
+l
         
 ### KP-GRN predict
         usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
