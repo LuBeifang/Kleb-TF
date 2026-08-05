@@ -13,7 +13,7 @@ This GitHub repository contains all the custom scripts and shell commands used i
 All raw sequence files, processed data, and pre-trained models are publicly available:
 
 * **Raw Sequence Files:** Uploaded to NCBI GEO under accession [GSE306886](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE306886).
-* **Processed Data:** Available on Zenodo at [DOI: 10.5281/zenodo.16993559](https://doi.org/10.5281/zenodo.16993559).
+* **Processed Data:** Available on [Zenodo](https://doi.org/10.5281/zenodo.21786623).
 * **GRN-predictor Model:** Published on Hugging Face at [Dylan-LE/KP-GRM-predictor](https://huggingface.co/Dylan-LE/KP-GRM-predictor/).
 
 ### Setup & Model Download
@@ -42,7 +42,9 @@ System requirement: Ubuntu 22.04; R version 4.5.1; CUDA version ≥ 12.1;
         git clone https://github.com/LuBeifang/Kleb-TF/
         cd Kleb-TF/GRN-predictor
         conda env create -f requirements.yml
-        git clone https://huggingface.co/Dylan-LE/KP-GRM-predictor
+        wget -c https://huggingface.co/Dylan-LE/KP-GRM-predictor/resolve/main/96TF/best_model.pt
+        wget -c https://huggingface.co/zengwenwu/ESM-DBP/resolve/main/ESM-DBP.model
+
         
 ### KP-GRN predict
         usage: predict.py [-h] [-tf INPUT_TF_FASTA] [-g GENOME] [-gff GFF] [-model MODEL] [-t THRESHOLD] [-o OUTPUT]
